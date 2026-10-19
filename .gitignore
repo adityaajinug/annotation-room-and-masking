@@ -1,3 +1,5 @@
 data/*.bak
 __pycache__/
 .claude/
+/room-image/
+/textures/
