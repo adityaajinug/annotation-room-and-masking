@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mask Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="admin-bar">
+    <label>Surface <select id="surface-select"></select></label>
+    <button class="btn on" id="mode-include" title="Shortcut: 1">Include</button>
+    <button class="btn" id="mode-exclude" title="Shortcut: 2">Exclude</button>
+    <button class="btn" id="btn-undo" title="Ctrl+Z">Undo</button>
+    <button class="btn" id="btn-delete" title="Delete">Delete</button>
+    <button class="btn" id="btn-test">Test texture</button>
+    <select id="product-select"></select>
+    <button class="btn" id="btn-preview">Preview</button>
+    <details class="more">
+      <summary class="btn">More</summary>
+      <div class="more-menu">
+        <button class="btn" id="mode-quad" title="Shortcut: 3">Draw perspective</button>
+        <button class="btn" id="btn-autoquad">Auto perspective</button>
+        <button class="btn" id="btn-redo" title="Ctrl+Y">Redo</button>
+        <button class="btn" id="btn-clear">Clear surface</button>
+        <button class="btn" id="zoom-out">Zoom -</button>
+        <button class="btn" id="zoom-fit">Zoom fit</button>
+        <button class="btn" id="zoom-in">Zoom +</button>
+        <button class="btn" id="btn-overlay">Hide overlay</button>
+        <button class="btn" id="btn-export">Export JSON</button>
+        <label class="btn">Import JSON <input type="file" id="file-import" accept=".json" hidden></label>
+        <a class="btn" href="index.html?draft=1" target="_blank">Open viewer</a>
+      </div>
+    </details>
+  </div>
+
+  <div class="admin-wrap">
+    <div class="guide" id="guide"></div>
+    <div class="admin-scroll">
+      <div class="admin-stage" id="admin-stage">
+        <img id="room" src="assets/room.jpg" alt="room">
+        <canvas id="test" hidden></canvas>
+      </div>
+    </div>
+    <p class="tips">
+      <b>How to mark:</b> 1) pick a surface · 2) <b>Include</b> = the area that WILL change to the new texture: click around it, finish by clicking the first
+      point or double-click · 3) <b>Exclude</b> = a hole inside Include that stays the original photo: do the same around objects on top (food, faucet) ·
+      4) <b>Test texture</b> (checkerboard, to check the edges) or <b>Preview</b> (real product) · 5) changes are autosaved as a draft. Angled surface (counter, floor)? More → <b>Auto perspective</b>.<br>
+      <b>Mistake?</b> <kbd>Esc</kbd> cancels the shape you are drawing · <kbd>Ctrl+Z</kbd> undo ·
+      click a shape then <kbd>Delete</kbd> · drag the dots of a selected shape to fix it.
+      Tip: follow the edge slightly <em>inside</em> the surface.
+    </p>
+    <p class="tips" id="admin-status"></p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.js"></script>
+  <script src="js/mask.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

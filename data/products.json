@@ -1,0 +1,40 @@
+{
+  "products": [
+    {
+      "id": "tex-1",
+      "name": "Texture 1 - Light quartz",
+      "kind": "texture",
+      "surfaceTypes": [
+        "wall",
+        "counter"
+      ],
+      "texture": "assets/textures/texture-1.jpg",
+      "crop": null,
+      "tileWidthPx": 400,
+      "rotation": 0,
+      "offset": [
+        0,
+        0
+      ],
+      "productUrl": ""
+    },
+    {
+      "id": "tex-2",
+      "name": "Texture 2 - Grey quartz",
+      "kind": "texture",
+      "surfaceTypes": [
+        "wall",
+        "counter"
+      ],
+      "texture": "assets/textures/texture-2.jpg",
+      "crop": null,
+      "tileWidthPx": 400,
+      "rotation": 0,
+      "offset": [
+        0,
+        0
+      ],
+      "productUrl": ""
+    }
+  ]
+}

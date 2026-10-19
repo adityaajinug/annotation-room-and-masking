@@ -1,0 +1,137 @@
+{
+  "rooms": [
+    {
+      "id": "kitchen-1",
+      "title": "Kitchen",
+      "image": "assets/room.jpg",
+      "surfaces": [
+        {
+          "id": "wall-panel",
+          "label": "Wall panel",
+          "type": "wall",
+          "polygons": [
+            {
+              "mode": "include",
+              "points": [
+                [
+                  0.3317,
+                  0.225
+                ],
+                [
+                  0.8717,
+                  0.225
+                ],
+                [
+                  0.8717,
+                  0.4038
+                ],
+                [
+                  0.3317,
+                  0.4038
+                ]
+              ]
+            }
+          ],
+          "feather": 1.5,
+          "shadeBlur": 30,
+          "shadeStrength": 0.8
+        },
+        {
+          "id": "island-top",
+          "label": "Island top",
+          "type": "counter",
+          "polygons": [
+            {
+              "mode": "quad",
+              "points": [
+                [
+                  0.188,
+                  0.706
+                ],
+                [
+                  1,
+                  0.706
+                ],
+                [
+                  1,
+                  0.806
+                ],
+                [
+                  0.081,
+                  0.802
+                ]
+              ]
+            },
+            {
+              "mode": "exclude",
+              "points": [
+                [
+                  0.655,
+                  0.68
+                ],
+                [
+                  0.882,
+                  0.68
+                ],
+                [
+                  0.882,
+                  0.755
+                ],
+                [
+                  0.655,
+                  0.755
+                ]
+              ]
+            },
+            {
+              "mode": "exclude",
+              "points": [
+                [
+                  0.5799,
+                  0.6601
+                ],
+                [
+                  0.655,
+                  0.6601
+                ],
+                [
+                  0.655,
+                  0.77
+                ],
+                [
+                  0.5799,
+                  0.77
+                ]
+              ]
+            },
+            {
+              "mode": "include",
+              "points": [
+                [
+                  0.188,
+                  0.706
+                ],
+                [
+                  1,
+                  0.706
+                ],
+                [
+                  1,
+                  0.806
+                ],
+                [
+                  0.081,
+                  0.802
+                ]
+              ]
+            }
+          ],
+          "planeAspect": 3.5,
+          "feather": 1.5,
+          "shadeBlur": 30,
+          "shadeStrength": 0.5
+        }
+      ]
+    }
+  ]
+}
