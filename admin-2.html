@@ -7,31 +7,20 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/style2.css">
 </head>
-<body>
-  <div class="admin-bar">
+<body class="app">
+  <header class="admin-bar">
     <label class="btn primary">Upload photo <input type="file" id="file-photo" accept="image/*" hidden></label>
-    <button class="btn on" id="mode-include" title="Shortcut: 1">Include</button>
-    <button class="btn" id="mode-exclude" title="Shortcut: 2">Exclude</button>
-    <span class="sep"></span>
-    <button class="btn" id="tool-select" title="Select / edit nodes (V)">Select</button>
-    <button class="btn on" id="tool-pen" title="Pen: click = corner, drag = curve (P)">Pen</button>
-    <button class="btn" id="tool-rect" title="Rectangle (R)">Rectangle</button>
-    <button class="btn" id="tool-ellipse" title="Ellipse / circle (O)">Ellipse</button>
     <span class="sep"></span>
     <button class="btn" id="btn-undo" title="Ctrl+Z">Undo</button>
+    <button class="btn" id="btn-redo" title="Ctrl+Shift+Z">Redo</button>
     <button class="btn" id="btn-delete" title="Delete">Delete shape</button>
+    <span class="sep"></span>
     <button class="btn" id="btn-test">Test texture</button>
     <select id="product-select"></select>
     <button class="btn" id="btn-preview">Preview</button>
     <details class="more">
       <summary class="btn">More</summary>
       <div class="more-menu">
-        <button class="btn" id="mode-quad" title="Shortcut: 3">Draw perspective</button>
-        <button class="btn" id="btn-autoquad">Auto perspective</button>
-        <button class="btn" id="btn-redo" title="Ctrl+Y">Redo</button>
-        <button class="btn" id="zoom-out">Zoom -</button>
-        <button class="btn" id="zoom-fit">Zoom fit</button>
-        <button class="btn" id="zoom-in">Zoom +</button>
         <button class="btn" id="btn-overlay">Hide overlay</button>
         <button class="btn" id="btn-export">Export JSON</button>
         <label class="btn">Import JSON <input type="file" id="file-import" accept=".json" hidden></label>
@@ -40,20 +29,92 @@
         <a class="btn" href="view-2.html" target="_blank">Open viewer</a>
       </div>
     </details>
-  </div>
+  </header>
 
-  <div class="admin2">
-    <aside class="side">
+  <div class="workspace">
+    <aside class="side left">
       <section>
         <h2>Surfaces <button class="btn small" id="btn-add-surface">+ Add</button></h2>
         <ul id="surface-list" class="rows"></ul>
         <p class="hint" id="surface-hint"></p>
       </section>
+      <section>
+        <h2>Textures <label class="btn small">+ Upload <input type="file" id="file-tex" accept="image/*" multiple hidden></label></h2>
+        <ul id="texture-list" class="rows"></ul>
+      </section>
+    </aside>
 
+    <main class="canvas-area">
+      <div class="admin-scroll" id="admin-scroll">
+        <div class="admin-stage" id="admin-stage"></div>
+        <div class="empty" id="empty">
+          <p>No photo yet.</p>
+          <label class="btn primary">Upload room photo <input type="file" id="file-photo-2" accept="image/*" hidden></label>
+        </div>
+      </div>
+
+      <div class="guide float" id="guide"></div>
+
+      <div class="draft-bar float" id="draft-bar" hidden>
+        <span><b id="draft-count">0</b> points</span>
+        <button class="btn small" id="draft-undo" title="Ctrl+Z">Undo last point</button>
+        <button class="btn small" id="draft-cancel" title="Esc">Cancel shape</button>
+        <button class="btn small primary" id="draft-finish" title="Enter">Finish</button>
+      </div>
+
+      <div class="tool-opts float" id="tool-opts" hidden>
+        <label>Tolerance <input type="range" id="wand-tol" min="5" max="100" step="1" value="25"> <b id="wand-tol-val">25</b></label>
+        <label class="inline"><input type="checkbox" id="wand-holes" checked> Objects inside become Exclude</label>
+        <span class="sep"></span>
+        <label>Object sensitivity <input type="range" id="detect-sens" min="1" max="75" step="1" value="55"> <b id="detect-sens-val">55</b></label>
+        <button class="btn small" id="btn-detect" title="Find objects (food, faucet...) inside this surface's Include shapes and make them Exclude">Auto exclude objects</button>
+      </div>
+
+      <div class="toolbar float" id="toolbar">
+        <button class="btn on" id="mode-include" title="Area that changes (1)">Include</button>
+        <button class="btn" id="mode-exclude" title="Area that stays original (2)">Exclude</button>
+        <button class="btn" id="mode-quad" title="4 corners of the flat plane (3)">Perspective</button>
+        <button class="btn" id="btn-autoquad" title="Build the perspective corners from the Include shape">Auto</button>
+        <span class="sep"></span>
+        <button class="btn" id="tool-select" title="Select / edit nodes (V)">Select</button>
+        <button class="btn on" id="tool-pen" title="Pen: click = corner, drag = curve (P)">Pen</button>
+        <button class="btn" id="tool-rect" title="Rectangle (R)">Rect</button>
+        <button class="btn" id="tool-ellipse" title="Ellipse / circle (O)">Ellipse</button>
+        <button class="btn" id="tool-wand" title="Magic wand: click an area of similar colour (W)">Wand</button>
+        <span class="sep"></span>
+        <button class="btn" id="btn-snap" title="Snap pen points to photo edges (S)">Snap edges</button>
+      </div>
+
+      <div class="zoombar float">
+        <button class="btn small" id="zoom-out" title="Zoom out (-)">&minus;</button>
+        <button class="btn small" id="zoom-100" title="Actual size"><span id="zoom-pct">100%</span></button>
+        <button class="btn small" id="zoom-in" title="Zoom in (+)">+</button>
+        <button class="btn small" id="zoom-fit" title="Fit to screen (0)">Fit</button>
+      </div>
+
+      <div class="statusbar float" id="admin-status"></div>
+
+      <details class="help float">
+        <summary class="btn small">?</summary>
+        <div class="help-body">
+          <p><b>Flow:</b> upload a photo, <b>+ Add</b> a surface and click the photo to place its dot, pick <b>Include</b> (changes) or <b>Exclude</b> (stays original), draw the shape, upload textures, <b>Test texture</b> / <b>Preview</b>. Everything autosaves in this browser; <b>More &rarr; Export JSON</b> for a portable copy.</p>
+          <p><b>Draw:</b> <kbd>P</kbd> Pen (click = corner, drag = curve, close on the first point / <kbd>Enter</kbd>) · <kbd>R</kbd> Rect · <kbd>O</kbd> Ellipse · <kbd>W</kbd> Wand (click a colour area) · <kbd>S</kbd> snap to edges.</p>
+          <p><b>Edit:</b> <kbd>V</kbd> Select, then click a shape · drag nodes and handles · double-click an outline = add node · double-click a node = corner/smooth · double-click a rectangle/ellipse = path · <kbd>Alt</kbd>+drag a handle = break symmetry.</p>
+          <p><b>Undo:</b> while drawing <kbd>Ctrl+Z</kbd> removes the last point, <kbd>Esc</kbd> cancels the whole shape. Afterwards <kbd>Ctrl+Z</kbd> undoes the shape, <kbd>Delete</kbd> removes the selected node or shape.</p>
+          <p><b>View:</b> mouse wheel = zoom at the cursor · hold <kbd>Space</kbd> and drag (or middle mouse) = pan · <kbd>+</kbd> <kbd>-</kbd> zoom · <kbd>0</kbd> fit.</p>
+        </div>
+      </details>
+    </main>
+
+    <aside class="side right">
       <section id="settings" hidden>
         <h2>Surface settings</h2>
         <label>Edge softness <input type="range" id="set-feather" min="0" max="6" step="0.5"></label>
         <label>Lighting <input type="range" id="set-shade" min="0" max="1" step="0.05"></label>
+        <label>Shadow detail <input type="range" id="set-detail" min="0" max="1" step="0.05"></label>
+        <label>Highlights <input type="range" id="set-highlight" min="0" max="1" step="0.05"></label>
+        <label>Contact shadow <input type="range" id="set-contact" min="0" max="1" step="0.05"></label>
+        <label>Scene tint <input type="range" id="set-tint" min="0" max="1" step="0.05"></label>
         <label>Plane aspect <input type="number" id="set-aspect" min="0.2" max="20" step="0.1" placeholder="auto">
           <small>Perspective only: width : depth of the real surface.</small></label>
       </section>
@@ -63,37 +124,12 @@
         <ul id="allowed-list" class="rows checks"></ul>
         <p class="hint">Only the checked textures show up for this surface in the viewer.</p>
       </section>
-
-      <section>
-        <h2>Textures <label class="btn small">+ Upload <input type="file" id="file-tex" accept="image/*" multiple hidden></label></h2>
-        <ul id="texture-list" class="rows"></ul>
-      </section>
     </aside>
-
-    <div class="main">
-      <div class="guide" id="guide"></div>
-      <div class="admin-scroll">
-        <div class="admin-stage" id="admin-stage"></div>
-        <div class="empty" id="empty">
-          <p>No photo yet.</p>
-          <label class="btn primary">Upload room photo <input type="file" id="file-photo-2" accept="image/*" hidden></label>
-        </div>
-      </div>
-      <p class="tips">
-        <b>Flow:</b> 1) upload a photo · 2) <b>+ Add</b> a surface, then click the photo to place its dot (drag a dot to move it) ·
-        3) <b>Include</b> = area that changes, <b>Exclude</b> = hole that stays the original photo ·
-        4) draw with <b>Pen</b> (click = corner, click + drag = curve, close on the first point), <b>Rectangle</b> or <b>Ellipse</b> ·
-        5) upload textures, then <b>Test texture</b> / <b>Preview</b> · 6) everything autosaves in this browser; <b>More → Export JSON</b> for a portable copy.<br>
-        <b>Edit:</b> <kbd>V</kbd> Select, then click a shape · drag nodes and curve handles · double-click an outline = add node · double-click a node = corner/smooth ·
-        double-click a rectangle/ellipse = turn it into a path · <kbd>Alt</kbd>+drag a handle = break symmetry.<br>
-        <b>Mistake?</b> <kbd>Esc</kbd> cancels the shape you are drawing · <kbd>Ctrl+Z</kbd> undo · <kbd>Delete</kbd> removes the selected node or shape.
-      </p>
-      <p class="tips" id="admin-status"></p>
-    </div>
   </div>
 
   <script src="js/mask.js"></script>
   <script src="js/shape-editor.js"></script>
+  <script src="js/vision.js"></script>
   <script src="js/render.js"></script>
   <script src="js/store2.js"></script>
   <script src="js/admin2.js"></script>
