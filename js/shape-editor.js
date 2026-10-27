@@ -69,7 +69,7 @@ function pathD(nodes, W, H, closed = true) {
 
 class ShapeEditor {
   // hooks: activeId(), mode(), color(sid), status(text), onChange(), onSelect(shape), onCreate(shape),
-  //        optional: snap(p, displayWidth) -> p, onWand(p), onDraft(pointCount)
+  //        optional: onWand(p, tool), onDraft(pointCount)
   constructor(img, hooks) {
     this.img = img;
     this.hooks = hooks;
@@ -215,7 +215,7 @@ class ShapeEditor {
     if (!this.hooks.activeId()) { this.hooks.status('Add a surface first (+ Add).'); return; }
     if (this.tool === 'wand' || this.tool === 'sam') { this.hooks.onWand(p, this.tool); return; }
     this.svg.setPointerCapture(e.pointerId);
-    if (this.tool === 'pen') this.penDown(this.snapPt(p));
+    if (this.tool === 'pen') this.penDown(p);
     else { this.boxDraft = { kind: this.tool, p0: p, box: null }; this.drag = { type: 'box' }; }
   }
 
@@ -237,8 +237,7 @@ class ShapeEditor {
       this.renderDraft();
     } else if (d.type === 'a' && s) {
       const n = s.nodes[d.i], o = d.orig[d.i];
-      const q = this.snapPt([c01(o.x + p[0] - d.start[0]), c01(o.y + p[1] - d.start[1])]);
-      n.x = q[0]; n.y = q[1];
+      n.x = c01(o.x + p[0] - d.start[0]); n.y = c01(o.y + p[1] - d.start[1]);
       d.moved = true;
       this.render();
     } else if ((d.type === 'i' || d.type === 'o') && s) {
@@ -298,8 +297,6 @@ class ShapeEditor {
       this.hooks.status('Converted to a path: drag its nodes, double-click a node to switch corner/smooth.');
     } else if (hit.mode !== 'quad') this.insertNode(hit, p);
   }
-
-  snapPt(p) { return this.hooks.snap ? this.hooks.snap(p, this.W) : p; }
 
   // Add ready-made polygons (e.g. from the magic wand) as one undo step.
   addPolygons(list) {

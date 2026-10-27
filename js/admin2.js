@@ -10,7 +10,7 @@ const LOOK_SLIDERS = [['set-detail', 'detailStrength', 0.6], ['set-highlight', '
 
 let project = Store.empty();
 let editor = null, vision = null, sam = new Sam(), img = null, surface = null, mode = 'include', tool = 'pen', placing = false, scale = 1;
-let snapOn = false, wandTol = 25, wandHoles = true, detectSens = 55;
+let wandTol = 25, wandHoles = true, detectSens = 55;
 
 const stage = $('admin-stage');
 const scroller = $('admin-scroll');
@@ -358,12 +358,6 @@ function makeEditor() {
       if (s && s !== surface) selectSurface(s, { shapes: false, pins: false });
     },
     onCreate: sh => { if (sh.mode === 'quad') setMode('include'); },
-    snap: (p, displayW) => {
-      if (!snapOn || !vision) return p;
-      const r = 12 * vision.w / displayW; // 12 screen px, in photo pixels
-      const q = vision.snap(p[0] * vision.w, p[1] * vision.h, r);
-      return q ? [q[0] / vision.w, q[1] / vision.h] : p;
-    },
     onWand: runWand,
     onDraft: n => {
       $('draft-bar').hidden = !n;
@@ -477,7 +471,7 @@ function bindView() {
   });
 }
 
-// ---- magic wand + edge snapping (js/vision.js) ----
+// ---- magic wand (js/vision.js) ----
 function runWand(p, kind) {
   if (kind === 'sam') { runSam(p); return; }
   if (!surface) { status('Add a surface first (+ Add).'); return; }
@@ -537,12 +531,6 @@ async function runSam(p) {
     status('AI select failed: ' + (e && e.message || e) + ' (needs internet the first time).');
     console.error(e);
   } finally { samBusy = false; }
-}
-
-function setSnap(on) {
-  snapOn = on;
-  $('btn-snap').classList.toggle('on', on);
-  status(on ? 'Edge snapping on: pen points and dragged nodes stick to photo edges.' : 'Edge snapping off.');
 }
 
 // Ctrl+Z / Undo button: while drawing it removes the last pen point, otherwise it steps through history.
@@ -640,7 +628,6 @@ async function init() {
   $('btn-add-surface').onclick = addSurface;
   ['include', 'exclude', 'quad'].forEach(k => ($('mode-' + k).onclick = () => setMode(k)));
   ['select', 'pen', 'rect', 'ellipse', 'wand', 'sam'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
-  $('btn-snap').onclick = () => setSnap(!snapOn);
   $('wand-tol').oninput = e => { wandTol = +e.target.value; $('wand-tol-val').textContent = wandTol; };
   $('detect-sens').oninput = e => { detectSens = +e.target.value; $('detect-sens-val').textContent = detectSens; };
   $('btn-detect').onclick = runDetect;
@@ -690,7 +677,6 @@ async function init() {
     else if (k === 'o') setTool('ellipse');
     else if (k === 'w') setTool('wand');
     else if (k === 'a') setTool('sam');
-    else if (k === 's' && !e.ctrlKey && !e.metaKey) setSnap(!snapOn);
     else if (k === ' ') { e.preventDefault(); spaceDown = true; scroller.classList.add('pan-ready'); }
     else if (k === '+' || k === '=') setScale(scale * 1.25);
     else if (k === '-') setScale(scale / 1.25);

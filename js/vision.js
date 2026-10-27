@@ -1,6 +1,5 @@
 // Image helpers for the mask editor, all plain JS (no model download):
 //   magic wand  - flood-fill the pixels of similar colour around a click, return its outline (+ holes)
-//   edge snap   - pull a point to the strongest edge (Sobel) within a small radius
 
 class Vision {
   constructor(img) {
@@ -12,7 +11,6 @@ class Vision {
     g.drawImage(img, 0, 0);
     this.raw = g.getImageData(0, 0, this.w, this.h).data;
     this.pix = null; // 3x3-blurred copy (noise-tolerant colour compare)
-    this.mag = null; // Sobel gradient magnitude
   }
 
   prep() {
@@ -33,44 +31,6 @@ class Vision {
       }
     }
     this.pix = out;
-  }
-
-  gradient() {
-    if (this.mag) return;
-    this.prep();
-    const { w, h, pix } = this;
-    const L = new Float32Array(w * h);
-    for (let i = 0; i < w * h; i++) L[i] = 0.299 * pix[i * 4] + 0.587 * pix[i * 4 + 1] + 0.114 * pix[i * 4 + 2];
-    const mag = new Float32Array(w * h);
-    for (let y = 1; y < h - 1; y++) {
-      for (let x = 1; x < w - 1; x++) {
-        const i = y * w + x;
-        const gx = L[i - w + 1] + 2 * L[i + 1] + L[i + w + 1] - L[i - w - 1] - 2 * L[i - 1] - L[i + w - 1];
-        const gy = L[i + w - 1] + 2 * L[i + w] + L[i + w + 1] - L[i - w - 1] - 2 * L[i - w] - L[i - w + 1];
-        mag[i] = Math.hypot(gx, gy);
-      }
-    }
-    this.mag = mag;
-  }
-
-  // Strongest edge within r image-pixels of (x, y), preferring close ones. Returns [x, y] or null.
-  snap(x, y, r) {
-    this.gradient();
-    const { w, h, mag } = this;
-    let best = null, bestScore = 0;
-    const x0 = Math.max(1, Math.floor(x - r)), x1 = Math.min(w - 2, Math.ceil(x + r));
-    const y0 = Math.max(1, Math.floor(y - r)), y1 = Math.min(h - 2, Math.ceil(y + r));
-    for (let yy = y0; yy <= y1; yy++) {
-      for (let xx = x0; xx <= x1; xx++) {
-        const d = Math.hypot(xx - x, yy - y);
-        if (d > r) continue;
-        const m = mag[yy * w + xx];
-        if (m < 40) continue;
-        const score = m * (1 - 0.5 * d / r);
-        if (score > bestScore) { bestScore = score; best = [xx + 0.5, yy + 0.5]; }
-      }
-    }
-    return best;
   }
 
   // tol 1..100. Returns { outer: [[x,y]...], holes: [[[x,y]...]...], area } in image pixels, or null.
