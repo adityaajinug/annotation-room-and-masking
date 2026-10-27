@@ -9,11 +9,6 @@
 <body>
   <header class="topbar">
     <h1>Room Texture Preview</h1>
-    <div class="actions">
-      <button id="btn-compare" disabled>Compare</button>
-      <button id="btn-download">Download</button>
-      <button id="btn-reset">Reset</button>
-    </div>
   </header>
 
   <main class="layout">
@@ -38,8 +33,6 @@
       <div class="stage" id="stage">
         <canvas id="cv-original"></canvas>
         <canvas id="cv-result" hidden></canvas>
-        <div class="divider" id="divider" hidden></div>
-        <input type="range" id="compare-range" min="0" max="100" value="50" hidden>
         <button class="pin" id="pin" hidden><span></span></button>
       </div>
       <p class="status" id="status">Loading…</p>
