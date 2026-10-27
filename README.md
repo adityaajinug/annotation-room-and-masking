@@ -102,3 +102,16 @@ PRD.MD                requirement awal
 | Perubahan JSON tidak terlihat | Hard refresh (`Ctrl+F5`); jika memakai `?draft=1`, draft browser lebih diutamakan dari `rooms.json`. |
 | Tekstur terlihat bergaris pada top meja | Efek sudut kamera hampir sejajar. Sesuaikan `planeAspect` atau Tile size. |
 | Ada tepi kotak di sekitar objek | Polygon Exclude terlalu kasar. Gambar ulang dengan lebih banyak titik. |
+
+## Versi 2: upload sendiri (`admin-2.html` + `view-2.html`)
+
+Halaman terpisah; `index.html` dan `admin.html` tidak berubah.
+
+| Halaman | Fungsi |
+|---|---|
+| `admin-2.html` | Upload foto, **+ Add** surface lalu klik foto untuk menaruh dot (dot bisa digeser), masking Include/Exclude/Perspective, upload tekstur |
+| `view-2.html` | Viewer untuk project yang dibuat di admin-2 |
+
+Penyimpanan: foto, tekstur, dot, dan polygon otomatis tersimpan di **IndexedDB browser** (dibagi antara admin-2 dan view-2).
+Untuk versi permanen/portabel: **More -> Export JSON** (gambar ikut di dalam sebagai data URL), simpan sebagai `data/project.json`.
+`view-2` dan `admin-2` memakai file itu bila browser belum punya data. Foto >2000px dan tekstur >2048px otomatis diperkecil.

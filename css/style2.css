@@ -1,0 +1,39 @@
+/* admin-2 / view-2 (on top of style.css) */
+.admin2 { display:grid; grid-template-columns:290px 1fr; gap:16px; max-width:1500px; margin:16px auto; padding:0 16px; align-items:start; }
+.admin2 .main { min-width:0; }
+.side { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; display:grid; gap:14px; }
+.side h2, .panel h2 { display:flex; justify-content:space-between; align-items:center; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+.side label { display:grid; gap:2px; margin-top:8px; color:var(--muted); }
+.side small { color:var(--muted); font-size:11px; }
+.btn.small { padding:2px 8px; font-size:12px; text-transform:none; letter-spacing:0; }
+.hint { color:var(--muted); font-size:12px; margin:6px 0 0; }
+
+.rows { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.rows li { display:flex; align-items:center; gap:8px; padding:5px 6px; border:2px solid var(--line); border-radius:8px; cursor:pointer; }
+.rows li.active { border-color:var(--accent); }
+.rows .dot { width:14px; height:14px; border-radius:50%; flex:none; border:2px solid #fff; box-shadow:0 0 0 1px #0004; }
+.rows .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rows img { width:40px; height:40px; object-fit:cover; border-radius:4px; flex:none; }
+.rows .icon { border:0; background:none; cursor:pointer; padding:2px 5px; color:var(--muted); border-radius:4px; }
+.rows .icon:hover { background:#eee; color:var(--fg); }
+.rows input[type=number] { width:64px; margin:0; }
+.rows .tex-meta { flex:1; min-width:0; display:grid; gap:2px; font-size:12px; }
+
+.checks label { display:flex; align-items:center; gap:8px; margin:0; width:100%; cursor:pointer; color:var(--fg); }
+.empty { display:grid; place-items:center; gap:10px; min-height:300px; color:#ccc; text-align:center; }
+.empty[hidden] { display:none; }
+
+.admin-pin { pointer-events:auto; cursor:grab; z-index:10; touch-action:none; user-select:none; }
+.admin-pin:active { cursor:grabbing; }
+.admin-pin.nopin { opacity:.7; border-style:dashed; }
+.place-overlay { position:absolute; inset:0; z-index:30; cursor:crosshair; background:rgba(47,111,237,.12); }
+.place-overlay[hidden] { display:none; }
+
+/* view-2 */
+.pin.has-name span { display:block; }
+.notice { max-width:520px; margin:60px auto; padding:20px; background:#fff; border:1px solid var(--line); border-radius:8px; text-align:center; }
+
+@media (max-width:900px) {
+  .admin2 { grid-template-columns:1fr; }
+  .side { order:2; }
+}

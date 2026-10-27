@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room Texture Preview 2</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style2.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Room Texture Preview</h1>
+    <div class="actions">
+      <button id="btn-compare" disabled>Compare</button>
+      <button id="btn-download">Download</button>
+      <button id="btn-reset">Reset</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden>
+    <p>No project yet. Upload a photo and add surfaces in the admin first.</p>
+    <a class="btn primary" href="admin-2.html">Open admin-2</a>
+  </div>
+
+  <main class="layout" id="layout" hidden>
+    <aside class="panel">
+      <div id="surface-chip"></div>
+      <h2>Textures</h2>
+      <ul id="product-list" class="products"></ul>
+
+      <details id="adjust" class="adjust">
+        <summary>Adjust texture</summary>
+        <label>Tile size <input type="range" id="adj-tile" min="100" max="1200" step="10"></label>
+        <label>Rotation
+          <select id="adj-rot"><option>0</option><option>90</option><option>180</option><option>270</option></select>
+        </label>
+        <label>Offset X <input type="range" id="adj-ox" min="-300" max="300" step="1"></label>
+        <label>Offset Y <input type="range" id="adj-oy" min="-300" max="300" step="1"></label>
+        <label>Lighting <input type="range" id="adj-shade" min="0" max="1" step="0.05"></label>
+      </details>
+    </aside>
+
+    <section class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="cv-original"></canvas>
+        <canvas id="cv-result" hidden></canvas>
+        <div class="divider" id="divider" hidden></div>
+        <input type="range" id="compare-range" min="0" max="100" value="50" hidden>
+      </div>
+      <p class="status" id="status">Loading…</p>
+    </section>
+  </main>
+
+  <script src="js/mask.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/store2.js"></script>
+  <script src="js/view2.js"></script>
+</body>
+</html>

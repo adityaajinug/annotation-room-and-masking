@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mask Admin 2</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style2.css">
+</head>
+<body>
+  <div class="admin-bar">
+    <label class="btn primary">Upload photo <input type="file" id="file-photo" accept="image/*" hidden></label>
+    <button class="btn on" id="mode-include" title="Shortcut: 1">Include</button>
+    <button class="btn" id="mode-exclude" title="Shortcut: 2">Exclude</button>
+    <button class="btn" id="btn-undo" title="Ctrl+Z">Undo</button>
+    <button class="btn" id="btn-delete" title="Delete">Delete shape</button>
+    <button class="btn" id="btn-test">Test texture</button>
+    <select id="product-select"></select>
+    <button class="btn" id="btn-preview">Preview</button>
+    <details class="more">
+      <summary class="btn">More</summary>
+      <div class="more-menu">
+        <button class="btn" id="mode-quad" title="Shortcut: 3">Draw perspective</button>
+        <button class="btn" id="btn-autoquad">Auto perspective</button>
+        <button class="btn" id="btn-redo" title="Ctrl+Y">Redo</button>
+        <button class="btn" id="zoom-out">Zoom -</button>
+        <button class="btn" id="zoom-fit">Zoom fit</button>
+        <button class="btn" id="zoom-in">Zoom +</button>
+        <button class="btn" id="btn-overlay">Hide overlay</button>
+        <button class="btn" id="btn-export">Export JSON</button>
+        <label class="btn">Import JSON <input type="file" id="file-import" accept=".json" hidden></label>
+        <button class="btn" id="btn-sample">Load sample (kitchen)</button>
+        <button class="btn" id="btn-reset">Reset everything</button>
+        <a class="btn" href="view-2.html" target="_blank">Open viewer</a>
+      </div>
+    </details>
+  </div>
+
+  <div class="admin2">
+    <aside class="side">
+      <section>
+        <h2>Surfaces <button class="btn small" id="btn-add-surface">+ Add</button></h2>
+        <ul id="surface-list" class="rows"></ul>
+        <p class="hint" id="surface-hint"></p>
+      </section>
+
+      <section id="settings" hidden>
+        <h2>Surface settings</h2>
+        <label>Edge softness <input type="range" id="set-feather" min="0" max="6" step="0.5"></label>
+        <label>Lighting <input type="range" id="set-shade" min="0" max="1" step="0.05"></label>
+        <label>Plane aspect <input type="number" id="set-aspect" min="0.2" max="20" step="0.1" placeholder="auto">
+          <small>Perspective only: width : depth of the real surface.</small></label>
+      </section>
+
+      <section id="allowed" hidden>
+        <h2>Textures for this surface</h2>
+        <ul id="allowed-list" class="rows checks"></ul>
+        <p class="hint">Only the checked textures show up for this surface in the viewer.</p>
+      </section>
+
+      <section>
+        <h2>Textures <label class="btn small">+ Upload <input type="file" id="file-tex" accept="image/*" multiple hidden></label></h2>
+        <ul id="texture-list" class="rows"></ul>
+      </section>
+    </aside>
+
+    <div class="main">
+      <div class="guide" id="guide"></div>
+      <div class="admin-scroll">
+        <div class="admin-stage" id="admin-stage"></div>
+        <div class="empty" id="empty">
+          <p>No photo yet.</p>
+          <label class="btn primary">Upload room photo <input type="file" id="file-photo-2" accept="image/*" hidden></label>
+        </div>
+      </div>
+      <p class="tips">
+        <b>Flow:</b> 1) upload a photo · 2) <b>+ Add</b> a surface, then click the photo to place its dot (drag a dot to move it) ·
+        3) <b>Include</b> = area that changes: click around it, finish by clicking the first point or double-click ·
+        4) <b>Exclude</b> = hole that stays the original photo · 5) upload textures, then <b>Test texture</b> / <b>Preview</b> ·
+        6) everything autosaves in this browser; <b>More → Export JSON</b> for a portable copy.<br>
+        <b>Mistake?</b> <kbd>Esc</kbd> cancels the shape you are drawing · <kbd>Ctrl+Z</kbd> undo · click a shape then <kbd>Delete</kbd>.
+      </p>
+      <p class="tips" id="admin-status"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.js"></script>
+  <script src="js/mask.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/store2.js"></script>
+  <script src="js/admin2.js"></script>
+</body>
+</html>
