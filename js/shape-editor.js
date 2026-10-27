@@ -68,7 +68,8 @@ function pathD(nodes, W, H, closed = true) {
 }
 
 class ShapeEditor {
-  // hooks: activeId(), mode(), color(sid), status(text), onChange(), onSelect(shape), onCreate(shape)
+  // hooks: activeId(), mode(), color(sid), status(text), onChange(), onSelect(shape), onCreate(shape),
+  //        optional: snap(p, displayWidth) -> p, onWand(p), onDraft(pointCount)
   constructor(img, hooks) {
     this.img = img;
     this.hooks = hooks;
@@ -158,12 +159,7 @@ class ShapeEditor {
 
   // Delete key: the selected node if one was clicked, else the whole shape (or the last pen point while drawing).
   deleteKey() {
-    if (this.draft) {
-      this.draft.nodes.pop();
-      if (!this.draft.nodes.length) this.draft = null;
-      this.render();
-      return true;
-    }
+    if (this.draft) return this.undoPoint();
     const s = this.sel;
     if (s && s.kind === 'path' && this.selNode >= 0 && s.nodes.length > (s.mode === 'quad' ? 4 : 3)) {
       s.nodes.splice(this.selNode, 1);
@@ -217,8 +213,9 @@ class ShapeEditor {
       return;
     }
     if (!this.hooks.activeId()) { this.hooks.status('Add a surface first (+ Add).'); return; }
+    if (this.tool === 'wand') { this.hooks.onWand(p); return; }
     this.svg.setPointerCapture(e.pointerId);
-    if (this.tool === 'pen') this.penDown(p);
+    if (this.tool === 'pen') this.penDown(this.snapPt(p));
     else { this.boxDraft = { kind: this.tool, p0: p, box: null }; this.drag = { type: 'box' }; }
   }
 
@@ -240,7 +237,8 @@ class ShapeEditor {
       this.renderDraft();
     } else if (d.type === 'a' && s) {
       const n = s.nodes[d.i], o = d.orig[d.i];
-      n.x = c01(o.x + p[0] - d.start[0]); n.y = c01(o.y + p[1] - d.start[1]);
+      const q = this.snapPt([c01(o.x + p[0] - d.start[0]), c01(o.y + p[1] - d.start[1])]);
+      n.x = q[0]; n.y = q[1];
       d.moved = true;
       this.render();
     } else if ((d.type === 'i' || d.type === 'o') && s) {
@@ -301,6 +299,19 @@ class ShapeEditor {
     } else if (hit.mode !== 'quad') this.insertNode(hit, p);
   }
 
+  snapPt(p) { return this.hooks.snap ? this.hooks.snap(p, this.W) : p; }
+
+  // Add ready-made polygons (e.g. from the magic wand) as one undo step.
+  addPolygons(list) {
+    const sid = this.hooks.activeId();
+    const made = list.map(poly => this.fromPolygon(sid, poly)).filter(Boolean);
+    if (!made.length) return;
+    for (const m of made) this.shapes.push(m);
+    this.sel = made[0]; this.selNode = -1;
+    this.render();
+    this.hooks.onChange();
+  }
+
   // ---- pen ----
   penDown(p) {
     const quad = this.hooks.mode() === 'quad';
@@ -311,6 +322,16 @@ class ShapeEditor {
     if (quad && d.nodes.length === 4) { this.drag = null; this.finishDraft(); return; }
     this.drag = { type: 'pen', node: n };
     this.renderDraft();
+  }
+
+  // Remove the last pen point (Ctrl+Z while drawing); the last one left cancels the shape.
+  undoPoint() {
+    if (!this.draft) return false;
+    this.draft.nodes.pop();
+    if (!this.draft.nodes.length) this.draft = null;
+    this.drag = null;
+    this.render();
+    return true;
   }
 
   finishDraft() {
@@ -458,6 +479,8 @@ class ShapeEditor {
   renderDraft() {
     const g = this.gDraft, W = this.W, H = this.H;
     g.replaceChildren();
+    const count = this.draft ? this.draft.nodes.length : 0;
+    if (count !== this.draftCount) { this.draftCount = count; if (this.hooks.onDraft) this.hooks.onDraft(count); }
     const bd = this.boxDraft;
     if (bd && bd.box) {
       svgEl('path', { d: pathD(nodesOfBox(bd.box, bd.kind), W, H), class: 'draft-line', fill: 'rgba(47,111,237,.15)' }, g);

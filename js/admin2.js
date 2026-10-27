@@ -5,11 +5,15 @@
 const $ = id => document.getElementById(id);
 const COLORS = ['#2f6fed', '#e8a200', '#9b51e0', '#00a98f', '#e5484d', '#7a8b00'];
 const PHOTO_MAX = 2000, TEX_MAX = 2048;
+// How the texture blends with the photo: [slider id, surface key, default] (defaults match render.js look()).
+const LOOK_SLIDERS = [['set-detail', 'detailStrength', 0.6], ['set-highlight', 'highlightStrength', 0.5], ['set-contact', 'contactShadow', 0.35], ['set-tint', 'tintStrength', 0.5]];
 
 let project = Store.empty();
-let editor = null, img = null, surface = null, mode = 'include', tool = 'pen', placing = false, zoom = 1;
+let editor = null, vision = null, img = null, surface = null, mode = 'include', tool = 'pen', placing = false, scale = 1;
+let snapOn = false, wandTol = 25, wandHoles = true, detectSens = 55;
 
 const stage = $('admin-stage');
+const scroller = $('admin-scroll');
 const surfaceById = id => project.surfaces.find(s => s.id === id);
 const colorOf = id => COLORS[Math.max(0, project.surfaces.findIndex(s => s.id === id)) % COLORS.length];
 const status = t => { $('admin-status').textContent = t; };
@@ -195,6 +199,7 @@ function renderSettings() {
   if (!surface) return;
   $('set-feather').value = surface.feather ?? 1.5;
   $('set-shade').value = surface.shadeStrength ?? 0.8;
+  for (const [id, key, def] of LOOK_SLIDERS) $(id).value = surface[key] ?? def;
   $('set-aspect').value = surface.planeAspect ?? '';
   renderAllowed();
 }
@@ -271,6 +276,7 @@ async function uploadTextures(files) {
 // ---- photo / shape editor ----
 async function mountPhoto() {
   editor = null;
+  vision = null;
   stage.replaceChildren();
   img = null;
   $('empty').hidden = !!project.image;
@@ -300,8 +306,8 @@ async function mountPhoto() {
     img.onerror = () => rej(new Error('Cannot load the photo.'));
     img.src = Store.urlOf(project.image);
   });
-  zoom = 1;
-  setZoom(1);
+  vision = new Vision(img);
+  fitView();
   refresh();
 }
 
@@ -329,6 +335,7 @@ function setMode(m) {
     pen: 'click = corner point, click + drag = curve. Finish: click the first point, press Enter or double-click.',
     rect: 'drag to draw a rectangle (Shift = square, Alt = from the centre).',
     ellipse: 'drag to draw an ellipse or circle (Shift = circle, Alt = from the centre).',
+    wand: 'click an object or surface: the area of similar colour becomes a shape. Adjust Tolerance below; objects inside become Exclude.',
   }[tool];
   const what = {
     include: 'area that should CHANGE',
@@ -350,6 +357,18 @@ function makeEditor() {
       if (s && s !== surface) selectSurface(s, { shapes: false, pins: false });
     },
     onCreate: sh => { if (sh.mode === 'quad') setMode('include'); },
+    snap: (p, displayW) => {
+      if (!snapOn || !vision) return p;
+      const r = 12 * vision.w / displayW; // 12 screen px, in photo pixels
+      const q = vision.snap(p[0] * vision.w, p[1] * vision.h, r);
+      return q ? [q[0] / vision.w, q[1] / vision.h] : p;
+    },
+    onWand: runWand,
+    onDraft: n => {
+      $('draft-bar').hidden = !n;
+      $('draft-count').textContent = n;
+      if (n) status('Ctrl+Z removes the last point, Esc cancels the whole shape.');
+    },
   });
   ed.setTool(tool);
   return ed;
@@ -357,7 +376,8 @@ function makeEditor() {
 
 function setTool(t) {
   tool = t;
-  ['select', 'pen', 'rect', 'ellipse'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
+  ['select', 'pen', 'rect', 'ellipse', 'wand'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
+  $('tool-opts').hidden = t !== 'wand';
   if (editor) editor.setTool(t);
   setMode(mode);
 }
@@ -396,14 +416,111 @@ function autoQuad() {
   status('Perspective corners created. Drag the dots to fine-tune, then Test texture.');
 }
 
-// Zoom = resize the image; the shape layer is redrawn at the new size.
-function setZoom(z) {
+// ---- view: zoom (wheel, buttons) and pan (Space + drag / middle mouse) ----
+const MIN_SCALE = 0.05, MAX_SCALE = 8;
+
+function fitScale() {
+  return Math.max(MIN_SCALE, Math.min((scroller.clientWidth - 110) / img.naturalWidth, (scroller.clientHeight - 110) / img.naturalHeight));
+}
+
+// scale = displayed px per photo px. (cx, cy) = the screen point that stays put (default: view centre).
+function setScale(sc, cx, cy) {
   if (!img) return;
-  const box = document.querySelector('.admin-scroll');
-  const fit = (box.clientWidth - 2) / img.naturalWidth;
-  zoom = Math.min(4, Math.max(0.5, z));
-  img.style.width = Math.round(img.naturalWidth * fit * zoom) + 'px';
+  const br = scroller.getBoundingClientRect(), r0 = img.getBoundingClientRect();
+  if (cx == null) { cx = br.left + br.width / 2; cy = br.top + br.height / 2; }
+  const fx = (cx - r0.left) / r0.width, fy = (cy - r0.top) / r0.height;
+  scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, sc));
+  img.style.width = Math.round(img.naturalWidth * scale) + 'px';
+  const r1 = img.getBoundingClientRect();
+  scroller.scrollLeft += r1.left + fx * r1.width - cx;
+  scroller.scrollTop += r1.top + fy * r1.height - cy;
+  $('zoom-pct').textContent = Math.round(scale * 100) + '%';
   if (editor) editor.render();
+}
+
+function fitView() {
+  if (!img) return;
+  setScale(fitScale());
+  scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+  scroller.scrollTop = (scroller.scrollHeight - scroller.clientHeight) / 2;
+}
+
+let spaceDown = false, pan = null;
+function bindView() {
+  $('zoom-in').onclick = () => setScale(scale * 1.25);
+  $('zoom-out').onclick = () => setScale(scale / 1.25);
+  $('zoom-100').onclick = () => setScale(1);
+  $('zoom-fit').onclick = fitView;
+  scroller.addEventListener('wheel', e => {
+    e.preventDefault();
+    setScale(scale * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+  }, { passive: false });
+  scroller.addEventListener('pointerdown', e => {
+    if (!(spaceDown && e.button === 0) && e.button !== 1) return;
+    e.preventDefault();
+    e.stopPropagation(); // do not draw while panning
+    pan = { x: e.clientX, y: e.clientY, l: scroller.scrollLeft, t: scroller.scrollTop };
+    scroller.setPointerCapture(e.pointerId);
+    scroller.classList.add('panning');
+  }, true);
+  scroller.addEventListener('pointermove', e => {
+    if (!pan) return;
+    scroller.scrollLeft = pan.l - (e.clientX - pan.x);
+    scroller.scrollTop = pan.t - (e.clientY - pan.y);
+  });
+  const endPan = () => { pan = null; scroller.classList.remove('panning'); };
+  scroller.addEventListener('pointerup', endPan);
+  scroller.addEventListener('pointercancel', endPan);
+  document.addEventListener('keyup', e => {
+    if (e.key === ' ') { e.preventDefault(); spaceDown = false; scroller.classList.remove('pan-ready'); }
+  });
+}
+
+// ---- magic wand + edge snapping (js/vision.js) ----
+function runWand(p) {
+  if (!surface) { status('Add a surface first (+ Add).'); return; }
+  if (mode === 'quad') { status('A perspective plane needs 4 corners: use Pen or Rect.'); return; }
+  const { w, h } = vision;
+  status('Selecting...');
+  setTimeout(() => { // let the status paint before the flood fill
+    const r = vision.wand(p[0] * w, p[1] * h, wandTol);
+    if (!r) { status('Nothing found there. Try a higher tolerance.'); return; }
+    const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
+    const list = [{ mode, points: norm(r.outer) }];
+    if (mode === 'include' && wandHoles) for (const hole of r.holes) list.push({ mode: 'exclude', points: norm(hole) });
+    editor.addPolygons(list);
+    const big = r.area > 0.6 * w * h ? ' The area is huge: lower the tolerance.' : '';
+    status(`Wand: ${list.length} shape(s). Refine the nodes with Select (V), or Ctrl+Z.${big}`);
+  }, 0);
+}
+
+// Find objects standing on this surface (colour differs from the surface) and add them as Exclude shapes.
+function runDetect() {
+  if (!surface || !vision) { status('Add a surface first (+ Add).'); return; }
+  const polys = editor.exportBySurface([surface.id])[surface.id].filter(p => p.mode !== 'quad');
+  if (!polys.some(p => p.mode === 'include')) { status('Draw or wand an Include shape on this surface first.'); return; }
+  const { w, h } = vision;
+  status('Looking for objects...');
+  setTimeout(() => {
+    const mask = buildMask(w, h, polys, 0);
+    const objs = vision.detectObjects(mask.data, detectSens);
+    if (!objs.length) { status('No objects found. Raise "Object sensitivity" or draw them by hand.'); return; }
+    const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
+    editor.addPolygons(objs.map(poly => ({ mode: 'exclude', points: norm(poly) })));
+    status(`${objs.length} object(s) added as Exclude. Fix them with Select (V), or Ctrl+Z.`);
+  }, 0);
+}
+
+function setSnap(on) {
+  snapOn = on;
+  $('btn-snap').classList.toggle('on', on);
+  status(on ? 'Edge snapping on: pen points and dragged nodes stick to photo edges.' : 'Edge snapping off.');
+}
+
+// Ctrl+Z / Undo button: while drawing it removes the last pen point, otherwise it steps through history.
+function undoAction(d) {
+  if (d < 0 && editor && editor.undoPoint()) return;
+  stepHistory(d);
 }
 
 function deleteSelected() {
@@ -494,19 +611,20 @@ async function init() {
   $('file-tex').onchange = e => { uploadTextures([...e.target.files]); e.target.value = ''; };
   $('btn-add-surface').onclick = addSurface;
   ['include', 'exclude', 'quad'].forEach(k => ($('mode-' + k).onclick = () => setMode(k)));
-  ['select', 'pen', 'rect', 'ellipse'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
+  ['select', 'pen', 'rect', 'ellipse', 'wand'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
+  $('btn-snap').onclick = () => setSnap(!snapOn);
+  $('wand-tol').oninput = e => { wandTol = +e.target.value; $('wand-tol-val').textContent = wandTol; };
+  $('detect-sens').oninput = e => { detectSens = +e.target.value; $('detect-sens-val').textContent = detectSens; };
+  $('btn-detect').onclick = runDetect;
+  $('wand-holes').onchange = e => { wandHoles = e.target.checked; };
+  $('draft-undo').onclick = () => editor && editor.undoPoint();
+  $('draft-cancel').onclick = () => editor && editor.cancelDraft();
+  $('draft-finish').onclick = () => editor && editor.finishDraft();
+  bindView();
   $('btn-delete').onclick = deleteSelected;
-  $('btn-undo').onclick = () => stepHistory(-1);
+  $('btn-undo').onclick = () => undoAction(-1);
   $('btn-redo').onclick = () => stepHistory(1);
   $('btn-autoquad').onclick = autoQuad;
-  $('zoom-in').onclick = () => setZoom(zoom * 1.25);
-  $('zoom-out').onclick = () => setZoom(zoom / 1.25);
-  $('zoom-fit').onclick = () => setZoom(1);
-  document.querySelector('.admin-scroll').addEventListener('wheel', e => {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
-  }, { passive: false });
   $('btn-overlay').onclick = e => {
     const hide = document.body.classList.toggle('hide-mask');
     e.target.textContent = hide ? 'Show overlay' : 'Hide overlay';
@@ -525,6 +643,7 @@ async function init() {
 
   $('set-feather').oninput = e => { surface.feather = +e.target.value; persist(); };
   $('set-shade').oninput = e => { surface.shadeStrength = +e.target.value; persist(); };
+  for (const [id, key] of LOOK_SLIDERS) $(id).oninput = e => { surface[key] = +e.target.value; persist(); };
   $('set-aspect').onchange = e => {
     if (+e.target.value > 0) surface.planeAspect = +e.target.value; else delete surface.planeAspect;
     persist();
@@ -541,7 +660,13 @@ async function init() {
     else if (k === 'p') setTool('pen');
     else if (k === 'r') setTool('rect');
     else if (k === 'o') setTool('ellipse');
-    else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); stepHistory(e.shiftKey ? 1 : -1); }
+    else if (k === 'w') setTool('wand');
+    else if (k === 's' && !e.ctrlKey && !e.metaKey) setSnap(!snapOn);
+    else if (k === ' ') { e.preventDefault(); spaceDown = true; scroller.classList.add('pan-ready'); }
+    else if (k === '+' || k === '=') setScale(scale * 1.25);
+    else if (k === '-') setScale(scale / 1.25);
+    else if (k === '0') fitView();
+    else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undoAction(e.shiftKey ? 1 : -1); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); stepHistory(1); }
     else if (k === '1') setMode('include');
     else if (k === '2') setMode('exclude');

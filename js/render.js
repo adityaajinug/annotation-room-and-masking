@@ -76,8 +76,8 @@ class SurfaceRenderer {
     const ox = params.offset[0], oy = params.offset[1];
 
     const { x0, y0, x1, y1 } = this.mask.bbox;
-    const M = this.mask.data, S = this.shade, P = this.photoData.data, out = this.result.data;
-    const k = params.shadeStrength ?? this.surface.shadeStrength ?? 0.8;
+    const M = this.mask.data, P = this.photoData.data, out = this.result.data;
+    const L = this.look(params);
     const mod = (v, n) => ((v % n) + n) % n;
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
@@ -100,10 +100,7 @@ class SurfaceRenderer {
           gg += T[a00 + 1] * w00 + T[a10 + 1] * w10 + T[a01 + 1] * w01 + T[a11 + 1] * w11;
           bb += T[a00 + 2] * w00 + T[a10 + 2] * w10 + T[a01 + 2] * w01 + T[a11 + 2] * w11;
         }
-        const sh = (1 + k * (S[i] - 1)) / taps;
-        out[j] = P[j] * (1 - m) + Math.min(255, r * sh) * m;
-        out[j + 1] = P[j + 1] * (1 - m) + Math.min(255, gg * sh) * m;
-        out[j + 2] = P[j + 2] * (1 - m) + Math.min(255, bb * sh) * m;
+        this.put(out, P, j, i, m, r / taps, gg / taps, bb / taps, L);
       }
     }
     return this.result;
@@ -131,6 +128,55 @@ class SurfaceRenderer {
     for (let i = 0; i < n; i++) {
       this.shade[i] = lb[i] ? Math.min(1.4, Math.max(0.6, lb[i] / mean)) : 1;
     }
+
+    // Mid-frequency detail: local lighting (small blur) relative to the broad lighting = shadows, folds.
+    const rs = 4 * w / 1600;
+    const ls = boxBlur(LM, w, h, rs), ms = boxBlur(M, w, h, rs);
+    this.detail = new Float32Array(n);
+    // Highlights: luminance well above the region's average (glossy reflections), 0..1.
+    const th = Math.min(0.9, Math.max(0.55, (mean * 1.3) / 1));
+    this.hi = new Float32Array(n);
+    // Contact shadow: 1 deep inside the mask, falling to 0 on its border (also around Exclude holes).
+    const me = boxBlur(M, w, h, 5 * w / 1600, 2);
+    this.edge = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      this.edge[i] = Math.min(1, Math.max(0, (me[i] - 0.45) / 0.5));
+      if (M[i] < 0.002) { this.detail[i] = 1; continue; }
+      const loc = ms[i] > 1e-4 ? ls[i] / ms[i] : 0;
+      this.detail[i] = lb[i] > 1e-4 ? Math.min(1.5, Math.max(0.6, loc / lb[i])) : 1;
+      const lum = (0.299 * P[i * 4] + 0.587 * P[i * 4 + 1] + 0.114 * P[i * 4 + 2]) / 255;
+      this.hi[i] = Math.min(1, Math.max(0, (lum - th) / (1 - th)));
+    }
+
+    // Scene tint: colour cast of the whole photo (gray-world), per channel relative to its luminance.
+    let sr = 0, sg = 0, sb = 0, c = 0;
+    for (let i = 0; i < n; i += 7) { sr += P[i * 4]; sg += P[i * 4 + 1]; sb += P[i * 4 + 2]; c++; }
+    const lumAvg = (0.299 * sr + 0.587 * sg + 0.114 * sb) / c || 1;
+    this.tint = [sr, sg, sb].map(v => Math.min(1.25, Math.max(0.8, v / c / lumAvg)));
+  }
+
+  // Per-render lighting settings (surface sliders, with defaults) and the scene tint gains.
+  look(params) {
+    const sf = this.surface, ts = sf.tintStrength ?? 0.5;
+    return {
+      k: params.shadeStrength ?? sf.shadeStrength ?? 0.8,
+      ds: sf.detailStrength ?? 0.6,
+      hs: sf.highlightStrength ?? 0.5,
+      as: sf.contactShadow ?? 0.35,
+      tg: this.tint.map(t => 1 + ts * (t - 1)),
+    };
+  }
+
+  // Composite one texel (already sampled, 0..255) over the photo pixel i with mask alpha m:
+  // broad lighting x local shadow detail x contact shadow x scene tint, then highlights added (screen).
+  put(out, P, j, i, m, r, g, b, L) {
+    if (m < 0.002) { out[j] = P[j]; out[j + 1] = P[j + 1]; out[j + 2] = P[j + 2]; return; }
+    const f = (1 + L.k * (this.shade[i] - 1)) * (1 + L.ds * (this.detail[i] - 1)) * (1 - 0.5 * L.as * (1 - this.edge[i]));
+    const hi = this.hi[i] * L.hs;
+    const t0 = Math.min(255, r * f * L.tg[0]), t1 = Math.min(255, g * f * L.tg[1]), t2 = Math.min(255, b * f * L.tg[2]);
+    out[j] = P[j] * (1 - m) + (t0 + (255 - t0) * hi) * m;
+    out[j + 1] = P[j + 1] * (1 - m) + (t1 + (255 - t1) * hi) * m;
+    out[j + 2] = P[j + 2] * (1 - m) + (t2 + (255 - t2) * hi) * m;
   }
 
   // tex: image/canvas. params: {tileWidthPx, rotation (deg), offset:[x,y], shadeStrength}
@@ -152,16 +198,12 @@ class SurfaceRenderer {
     const T = g.getImageData(0, 0, w, h).data;
 
     const { x0, y0, x1, y1 } = this.mask.bbox;
-    const M = this.mask.data, S = this.shade, P = this.photoData.data, out = this.result.data;
-    const k = params.shadeStrength ?? this.surface.shadeStrength ?? 0.8;
+    const M = this.mask.data, P = this.photoData.data, out = this.result.data;
+    const L = this.look(params);
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        const i = y * w + x, j = i * 4, m = M[i];
-        const sh = 1 + k * (S[i] - 1);
-        for (let c = 0; c < 3; c++) {
-          const t = Math.min(255, T[j + c] * sh);
-          out[j + c] = P[j + c] * (1 - m) + t * m;
-        }
+        const i = y * w + x, j = i * 4;
+        this.put(out, P, j, i, M[i], T[j], T[j + 1], T[j + 2], L);
       }
     }
     return this.result;
