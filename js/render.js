@@ -30,12 +30,15 @@ class SurfaceRenderer {
     const pts = q.points.map(([x, y]) => [x * this.w, y * this.h]);
     const cx = pts.reduce((a, p) => a + p[0], 0) / 4, cy = pts.reduce((a, p) => a + p[1], 0) / 4;
     pts.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
-    let tl = 0; // top-left = smallest x+y
-    pts.forEach((p, i) => { if (p[0] + p[1] < pts[tl][0] + pts[tl][1]) tl = i; });
+    // Order is clockwise on screen, so the top edge is the one with the smallest mean y and its
+    // first point is top-left. (Smallest x+y mis-picks the corner on wide, skewed quads.)
+    let tl = 0;
+    pts.forEach((p, i) => { if (p[1] + pts[(i + 1) % 4][1] < pts[tl][1] + pts[(tl + 1) % 4][1]) tl = i; });
     const [a, b, c, d] = [0, 1, 2, 3].map(i => pts[(tl + i) % 4]);
     const dist = (p, r) => Math.hypot(p[0] - r[0], p[1] - r[1]);
     const Wp = (dist(a, b) + dist(d, c)) / 2;
-    const Hp = surface.planeAspect ? Wp / surface.planeAspect : (dist(a, d) + dist(b, c)) / 2;
+    const aspect = surface.planeAspect || estimateAspect([a, b, c, d], this.w / 2, this.h / 2);
+    const Hp = aspect ? Wp / aspect : (dist(a, d) + dist(b, c)) / 2;
     // image -> plane homography
     this.H = homography([a, b, c, d], [[0, 0], [Wp, 0], [Wp, Hp], [0, Hp]]);
     return { Wp, Hp };
@@ -214,4 +217,22 @@ function homography(src, dst) {
     }
   }
   return [...A.map((row, i) => row[8] / row[i]), 1];
+}
+
+// Real width:height of a perspective quad [TL,TR,BR,BL] (Zhang & He rectangle method), assuming
+// square pixels and the principal point at (cx, cy). Returns 0 when it cannot be recovered
+// (near fronto-parallel view or a degenerate quad) so the caller falls back to screen proportions.
+function estimateAspect(q, cx, cy) {
+  const m = [q[0], q[1], q[3], q[2]].map(([x, y]) => [x - cx, y - cy, 1]); // m1=TL m2=TR m3=BL m4=BR
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const [m1, m2, m3, m4] = m;
+  const k2 = dot(cross(m1, m4), m3) / dot(cross(m2, m4), m3);
+  const k3 = dot(cross(m1, m4), m2) / dot(cross(m3, m4), m2);
+  const n2 = m2.map((v, i) => k2 * v - m1[i]), n3 = m3.map((v, i) => k3 * v - m1[i]);
+  const f2 = -(n2[0] * n3[0] + n2[1] * n3[1]) / (n2[2] * n3[2]);
+  if (!(f2 > 0) || !isFinite(f2)) return 0;
+  const len2 = n => (n[0] * n[0] + n[1] * n[1]) / f2 + n[2] * n[2];
+  const r = Math.sqrt(len2(n2) / len2(n3));
+  return r > 0.1 && r < 30 ? r : 0;
 }

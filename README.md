@@ -88,7 +88,7 @@ PRD.MD                requirement awal
   `surfaceTypes` harus cocok dengan `type` surface (mis. `"wall"`, `"counter"`).
 - **Surface baru**: tambahkan entri di `surfaces` pada `data/rooms.json` (polygon bisa kosong
   `[]`, lalu digambar di admin).
-  - `planeAspect`: rasio lebar:kedalaman bidang asli untuk surface perspektif (mis. top meja ~3.5).
+  - `planeAspect`: rasio lebar:kedalaman bidang asli untuk surface perspektif (mis. top meja ~3.5). Jika kosong, rasio diestimasi otomatis dari 4 sudut quad (asumsi pixel persegi, titik utama di tengah foto); jika estimasi gagal (sudut pandang hampir frontal) dipakai proporsi di layar.
   - `feather`, `shadeBlur`, `shadeStrength`: kehalusan tepi dan pencahayaan.
 - **Foto baru**: ganti `assets/room.jpg` (dan `image` di `rooms.json`), lalu gambar ulang mask.
 
