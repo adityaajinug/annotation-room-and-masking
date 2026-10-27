@@ -37,3 +37,17 @@
   .admin2 { grid-template-columns:1fr; }
   .side { order:2; }
 }
+
+/* vector mask editor (js/shape-editor.js) */
+.shape-layer { position:absolute; left:0; top:0; z-index:5; touch-action:none; user-select:none; }
+.shape-layer.tool-select { cursor:default; }
+.shape-layer.tool-pen, .shape-layer.tool-rect, .shape-layer.tool-ellipse { cursor:crosshair; }
+.shape-layer .shape { pointer-events:none; vector-effect:non-scaling-stroke; }
+.shape-layer.tool-select .shape { pointer-events:all; cursor:move; }
+.shape-layer .h-anchor { fill:#fff; stroke:#2f6fed; stroke-width:1.5; cursor:pointer; }
+.shape-layer .h-anchor.smooth { rx:5; }
+.shape-layer .h-anchor.on { fill:#2f6fed; }
+.shape-layer .h-anchor.first { stroke:#e5484d; fill:#ffe3e3; }
+.shape-layer .h-ctrl { fill:#fff; stroke:#e8a200; stroke-width:1.5; cursor:pointer; }
+.shape-layer .h-line { stroke:#e8a200; stroke-width:1; }
+.shape-layer .draft-line { stroke:#2f6fed; stroke-width:1.5; }

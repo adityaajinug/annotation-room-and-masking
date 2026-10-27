@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mask Admin 2</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/style2.css">
 </head>
@@ -13,6 +12,12 @@
     <label class="btn primary">Upload photo <input type="file" id="file-photo" accept="image/*" hidden></label>
     <button class="btn on" id="mode-include" title="Shortcut: 1">Include</button>
     <button class="btn" id="mode-exclude" title="Shortcut: 2">Exclude</button>
+    <span class="sep"></span>
+    <button class="btn" id="tool-select" title="Select / edit nodes (V)">Select</button>
+    <button class="btn on" id="tool-pen" title="Pen: click = corner, drag = curve (P)">Pen</button>
+    <button class="btn" id="tool-rect" title="Rectangle (R)">Rectangle</button>
+    <button class="btn" id="tool-ellipse" title="Ellipse / circle (O)">Ellipse</button>
+    <span class="sep"></span>
     <button class="btn" id="btn-undo" title="Ctrl+Z">Undo</button>
     <button class="btn" id="btn-delete" title="Delete">Delete shape</button>
     <button class="btn" id="btn-test">Test texture</button>
@@ -76,17 +81,19 @@
       </div>
       <p class="tips">
         <b>Flow:</b> 1) upload a photo · 2) <b>+ Add</b> a surface, then click the photo to place its dot (drag a dot to move it) ·
-        3) <b>Include</b> = area that changes: click around it, finish by clicking the first point or double-click ·
-        4) <b>Exclude</b> = hole that stays the original photo · 5) upload textures, then <b>Test texture</b> / <b>Preview</b> ·
-        6) everything autosaves in this browser; <b>More → Export JSON</b> for a portable copy.<br>
-        <b>Mistake?</b> <kbd>Esc</kbd> cancels the shape you are drawing · <kbd>Ctrl+Z</kbd> undo · click a shape then <kbd>Delete</kbd>.
+        3) <b>Include</b> = area that changes, <b>Exclude</b> = hole that stays the original photo ·
+        4) draw with <b>Pen</b> (click = corner, click + drag = curve, close on the first point), <b>Rectangle</b> or <b>Ellipse</b> ·
+        5) upload textures, then <b>Test texture</b> / <b>Preview</b> · 6) everything autosaves in this browser; <b>More → Export JSON</b> for a portable copy.<br>
+        <b>Edit:</b> <kbd>V</kbd> Select, then click a shape · drag nodes and curve handles · double-click an outline = add node · double-click a node = corner/smooth ·
+        double-click a rectangle/ellipse = turn it into a path · <kbd>Alt</kbd>+drag a handle = break symmetry.<br>
+        <b>Mistake?</b> <kbd>Esc</kbd> cancels the shape you are drawing · <kbd>Ctrl+Z</kbd> undo · <kbd>Delete</kbd> removes the selected node or shape.
       </p>
       <p class="tips" id="admin-status"></p>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@recogito/annotorious@2.7.14/dist/annotorious.min.js"></script>
   <script src="js/mask.js"></script>
+  <script src="js/shape-editor.js"></script>
   <script src="js/render.js"></script>
   <script src="js/store2.js"></script>
   <script src="js/admin2.js"></script>

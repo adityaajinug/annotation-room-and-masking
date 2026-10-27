@@ -1,59 +1,18 @@
 // Mask editor 2: upload your own photo + textures, add your own surfaces (dots), mask them.
-// Same Annotorious tagging as admin.js:
-//   tagging "mode"    = include | exclude | quad
-//   tagging "surface" = surface id
+// Shapes are drawn with ShapeEditor (js/shape-editor.js): pen / rectangle / ellipse, each tagged with
+//   mode = include | exclude | quad  and the surface it belongs to.
 
 const $ = id => document.getElementById(id);
 const COLORS = ['#2f6fed', '#e8a200', '#9b51e0', '#00a98f', '#e5484d', '#7a8b00'];
 const PHOTO_MAX = 2000, TEX_MAX = 2048;
 
 let project = Store.empty();
-let anno = null, img = null, surface = null, mode = 'include', selected = null, placing = false, zoom = 1;
+let editor = null, img = null, surface = null, mode = 'include', tool = 'pen', placing = false, zoom = 1;
 
 const stage = $('admin-stage');
 const surfaceById = id => project.surfaces.find(s => s.id === id);
-const tagValue = (a, purpose) => (a.body || []).find(b => b.purpose === purpose)?.value;
-const modeOf = a => tagValue(a, 'mode') || 'include';
-const surfaceOf = a => tagValue(a, 'surface') || surface?.id;
 const colorOf = id => COLORS[Math.max(0, project.surfaces.findIndex(s => s.id === id)) % COLORS.length];
 const status = t => { $('admin-status').textContent = t; };
-
-function bodyFor(m, sid) {
-  return [
-    { type: 'TextualBody', purpose: 'mode', value: m },
-    { type: 'TextualBody', purpose: 'surface', value: sid },
-  ];
-}
-
-function toAnnotation(poly, sid, i) {
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const pts = poly.points.map(([x, y]) => `${(x * w).toFixed(1)},${(y * h).toFixed(1)}`).join(' ');
-  return {
-    '@context': 'http://www.w3.org/ns/anno.jsonld',
-    type: 'Annotation',
-    id: `#${sid}-${i}`,
-    body: bodyFor(poly.mode, sid),
-    target: { selector: { type: 'SvgSelector', value: `<svg><polygon points="${pts}"></polygon></svg>` } },
-  };
-}
-
-// Annotorious -> { surfaceId: [{mode, points}] }
-function fromAnnotations() {
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const out = Object.fromEntries(project.surfaces.map(s => [s.id, []]));
-  for (const a of anno.getAnnotations()) {
-    const sel = a.target.selector;
-    const m = sel && sel.value && sel.value.match(/points=["']([^"']+)["']/);
-    const sid = surfaceOf(a);
-    if (!m || !out[sid]) continue;
-    const points = m[1].trim().split(/\s+/).map(p => {
-      const [x, y] = p.split(',').map(Number);
-      return [+(x / w).toFixed(4), +(y / h).toFixed(4)];
-    });
-    out[sid].push({ mode: modeOf(a), points });
-  }
-  return out;
-}
 
 // ---- persistence + undo/redo (snapshots of surfaces: polygons, dots, settings) ----
 let persistTimer = 0;
@@ -88,8 +47,8 @@ function stepHistory(d) {
 
 // Read shapes from the canvas into the project, save, redraw side UI.
 function saveAll() {
-  if (anno && img) {
-    const polys = fromAnnotations();
+  if (editor && img) {
+    const polys = editor.exportBySurface(project.surfaces.map(s => s.id));
     for (const s of project.surfaces) s.polygons = polys[s.id];
   }
   persist();
@@ -101,9 +60,8 @@ function saveAll() {
 }
 
 function loadAll() {
-  if (!anno) return;
-  anno.setAnnotations(project.surfaces.flatMap(s => s.polygons.map((p, i) => toAnnotation(p, s.id, i))));
-  selected = null;
+  if (!editor) return;
+  editor.setShapes(project.surfaces.flatMap(s => s.polygons.map(polygon => ({ sid: s.id, polygon }))));
 }
 
 function refresh() {
@@ -162,7 +120,7 @@ function setPlacing(on) {
 }
 
 // ---- surfaces ----
-// shapes: re-run the Annotorious formatter (dims other surfaces); pins: rebuild the dots.
+// shapes: redraw the overlay (dims other surfaces); pins: rebuild the dots.
 // Both are skipped while the user is dragging a dot / editing a shape, which a rebuild would interrupt.
 function selectSurface(s, { shapes = true, pins = true } = {}) {
   surface = s;
@@ -177,7 +135,7 @@ function selectSurface(s, { shapes = true, pins = true } = {}) {
       n.textContent = project.surfaces[i].label + (on ? ' ✎' : '');
     });
   }
-  if (shapes && anno) anno.setAnnotations(anno.getAnnotations());
+  if (shapes && editor) editor.render();
 }
 
 function addSurface() {
@@ -310,9 +268,9 @@ async function uploadTextures(files) {
   status(`${project.textures.length} texture(s).`);
 }
 
-// ---- photo / Annotorious ----
+// ---- photo / shape editor ----
 async function mountPhoto() {
-  if (anno) { try { anno.destroy(); } catch (e) { /* ignore */ } anno = null; }
+  editor = null;
   stage.replaceChildren();
   img = null;
   $('empty').hidden = !!project.image;
@@ -335,12 +293,13 @@ async function mountPhoto() {
     saveAll();
   };
   stage.append(img, cv, ov);
+  editor = makeEditor();
+  stage.insertBefore(editor.svg, ov);
   await new Promise((res, rej) => {
     img.onload = res;
     img.onerror = () => rej(new Error('Cannot load the photo.'));
     img.src = Store.urlOf(project.image);
   });
-  setupAnnotorious();
   zoom = 1;
   setZoom(1);
   refresh();
@@ -365,62 +324,55 @@ function setMode(m) {
   if (placing) return;
   if (!project.image) { $('guide').textContent = 'Upload a room photo to start.'; return; }
   if (!surface) { $('guide').textContent = 'Click "+ Add" to create the first surface.'; return; }
+  const how = {
+    select: 'click a shape to select it, drag to move. Drag its nodes; double-click an outline to add a node, a node to switch corner/smooth, a rectangle/ellipse to turn it into a path. Delete removes the selected node or shape.',
+    pen: 'click = corner point, click + drag = curve. Finish: click the first point, press Enter or double-click.',
+    rect: 'drag to draw a rectangle (Shift = square, Alt = from the centre).',
+    ellipse: 'drag to draw an ellipse or circle (Shift = circle, Alt = from the centre).',
+  }[tool];
   const what = {
-    include: 'click points around the area that should CHANGE. Finish: click the first point or double-click.',
-    exclude: 'click points around an object that must STAY original (food, faucet...). Finish: click the first point or double-click.',
-    quad: 'click the 4 corners of the flat plane, or just press "Auto perspective".',
+    include: 'area that should CHANGE',
+    exclude: 'object that must STAY original (food, faucet...)',
+    quad: 'the 4 corners of the flat plane (or press "Auto perspective")',
   }[m];
-  $('guide').textContent = `Drawing on "${surface.label}" - ${m.toUpperCase()}: ${what} (Esc = cancel)`;
+  $('guide').textContent = `${surface.label} - ${m.toUpperCase()} = ${what}. ${tool.toUpperCase()}: ${how} (Esc = cancel)`;
 }
 
-function setupAnnotorious() {
-  anno = Annotorious.init({
-    image: img,
-    disableEditor: true,
-    formatter: a => {
-      const sid = surfaceOf(a), m = modeOf(a), c = colorOf(sid);
-      const dim = sid !== surface?.id ? ' dim' : '';
-      if (m === 'exclude') return { className: 'exclude' + dim, style: 'stroke:#ff3b30;fill:rgba(255,59,48,.28)' };
-      if (m === 'quad') return { className: 'quad' + dim, style: `stroke:${c};fill:none` };
-      return { className: 'include' + dim, style: `stroke:${c};fill:${c};fill-opacity:.3` };
+function makeEditor() {
+  const ed = new ShapeEditor(img, {
+    activeId: () => surface?.id,
+    mode: () => mode,
+    color: colorOf,
+    status,
+    onChange: saveAll,
+    onSelect: sh => {
+      const s = surfaceById(sh.sid);
+      if (s && s !== surface) selectSurface(s, { shapes: false, pins: false });
     },
+    onCreate: sh => { if (sh.mode === 'quad') setMode('include'); },
   });
-  anno.setDrawingTool('polygon');
-
-  // Tag every new shape with the current mode + surface and save immediately (no popup).
-  anno.on('createSelection', async selection => {
-    if (!surface) { anno.cancelSelected(); status('Add a surface first (+ Add).'); return; }
-    selection.body = bodyFor(mode, surface.id);
-    if (mode === 'quad') { // only one perspective shape per surface
-      for (const a of anno.getAnnotations()) if (surfaceOf(a) === surface.id && modeOf(a) === 'quad') anno.removeAnnotation(a);
-    }
-    await anno.updateSelected(selection, true);
-    saveAll();
-    if (mode === 'quad') setMode('include');
-  });
-  anno.on('updateAnnotation', saveAll);
-  anno.on('deleteAnnotation', saveAll);
-  anno.on('selectAnnotation', a => {
-    selected = a;
-    const s = surfaceById(surfaceOf(a));
-    if (s && s !== surface) selectSurface(s, { shapes: false, pins: false });
-  });
-  anno.on('cancelSelected', () => { selected = null; });
+  ed.setTool(tool);
+  return ed;
 }
 
-// Abort a half-drawn shape: toggling the drawing tool drops the unfinished one.
+function setTool(t) {
+  tool = t;
+  ['select', 'pen', 'rect', 'ellipse'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
+  if (editor) editor.setTool(t);
+  setMode(mode);
+}
+
+// Abort a half-drawn shape (or drop the selection).
 function cancelDrawing() {
   if (placing) { setPlacing(false); return; }
-  if (!anno) return;
-  anno.cancelSelected();
-  anno.setDrawingEnabled(false);
-  anno.setDrawingEnabled(true);
-  status('Drawing cancelled.');
+  if (!editor) return;
+  if (editor.cancelDraft()) status('Drawing cancelled.');
+  else editor.select(null);
 }
 
 // Build the 4 perspective corners from this surface's Include polygon(s).
 function autoQuad() {
-  if (!anno || !surface) return;
+  if (!editor || !surface) return;
   saveAll();
   const list = surface.polygons;
   const inc = list.filter(p => p.mode === 'include');
@@ -444,23 +396,18 @@ function autoQuad() {
   status('Perspective corners created. Drag the dots to fine-tune, then Test texture.');
 }
 
-// Zoom = resize the image; Annotorious' SVG layer scales with it.
+// Zoom = resize the image; the shape layer is redrawn at the new size.
 function setZoom(z) {
   if (!img) return;
   const box = document.querySelector('.admin-scroll');
   const fit = (box.clientWidth - 2) / img.naturalWidth;
   zoom = Math.min(4, Math.max(0.5, z));
   img.style.width = Math.round(img.naturalWidth * fit * zoom) + 'px';
-  window.dispatchEvent(new Event('resize'));
+  if (editor) editor.render();
 }
 
 function deleteSelected() {
-  if (!anno) return;
-  const a = selected || anno.getSelected();
-  if (!a) return;
-  anno.removeAnnotation(a);
-  selected = null;
-  saveAll();
+  if (editor) editor.deleteShape();
 }
 
 // Render exactly like the viewer. textureId '' = checkerboard test.
@@ -480,7 +427,7 @@ async function togglePreview(textureId) {
     g.fillStyle = '#ff00aa'; g.fillRect(0, 0, 16, 16);
     g.fillStyle = '#00ffd0'; g.fillRect(0, 0, 8, 8); g.fillRect(8, 8, 8, 8);
   }
-  const polys = fromAnnotations();
+  const polys = editor.exportBySurface(project.surfaces.map(x => x.id));
   let shared = null;
   for (const s of project.surfaces) {
     const r = new SurfaceRenderer(img, { ...s, polygons: polys[s.id] }, shared);
@@ -547,6 +494,7 @@ async function init() {
   $('file-tex').onchange = e => { uploadTextures([...e.target.files]); e.target.value = ''; };
   $('btn-add-surface').onclick = addSurface;
   ['include', 'exclude', 'quad'].forEach(k => ($('mode-' + k).onclick = () => setMode(k)));
+  ['select', 'pen', 'rect', 'ellipse'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
   $('btn-delete').onclick = deleteSelected;
   $('btn-undo').onclick = () => stepHistory(-1);
   $('btn-redo').onclick = () => stepHistory(1);
@@ -585,8 +533,14 @@ async function init() {
   document.addEventListener('keydown', e => {
     if (/^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
     const k = e.key.toLowerCase();
-    if (k === 'delete' || k === 'backspace') deleteSelected();
+    if (placing && k === 'escape') { setPlacing(false); return; }
+    if (editor && !e.ctrlKey && !e.metaKey && editor.key(e)) return;
+    if (k === 'delete' || k === 'backspace') { if (editor) editor.deleteKey(); }
     else if (k === 'escape') cancelDrawing();
+    else if (k === 'v') setTool('select');
+    else if (k === 'p') setTool('pen');
+    else if (k === 'r') setTool('rect');
+    else if (k === 'o') setTool('ellipse');
     else if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); stepHistory(e.shiftKey ? 1 : -1); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); stepHistory(1); }
     else if (k === '1') setMode('include');
