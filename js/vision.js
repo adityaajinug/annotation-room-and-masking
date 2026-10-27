@@ -107,7 +107,44 @@ class Vision {
       if (y < h - 1 && !mask[i + w] && near(i + w)) { mask[i + w] = 1; stack[sp++] = i + w; }
     }
     if (area < 12) return null;
+    return this.outlineOf(mask, area, bx0, by0, bx1, by1);
+  }
 
+  // Outline (+ holes) of an external binary mask (e.g. from the AI select). Keeps the blob under (sx, sy).
+  outlineOfMask(src, sx, sy) {
+    const { w, h } = this;
+    sx = Math.min(w - 1, Math.max(0, Math.floor(sx)));
+    sy = Math.min(h - 1, Math.max(0, Math.floor(sy)));
+    let start = sy * w + sx;
+    if (!src[start]) { // click landed just outside the mask: take the nearest set pixel
+      let best = -1, bd = 1e9;
+      for (let i = 0; i < src.length; i++) {
+        if (!src[i]) continue;
+        const d = (i % w - sx) ** 2 + (((i / w) | 0) - sy) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best < 0) return null;
+      start = best;
+    }
+    const mask = new Uint8Array(w * h), stack = new Int32Array(w * h);
+    let sp = 0, area = 0, bx0 = w, by0 = h, bx1 = -1, by1 = -1;
+    mask[start] = 1; stack[sp++] = start;
+    while (sp) {
+      const i = stack[--sp], x = i % w, y = (i / w) | 0;
+      area++;
+      if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
+      if (x > 0 && src[i - 1] && !mask[i - 1]) { mask[i - 1] = 1; stack[sp++] = i - 1; }
+      if (x < w - 1 && src[i + 1] && !mask[i + 1]) { mask[i + 1] = 1; stack[sp++] = i + 1; }
+      if (y > 0 && src[i - w] && !mask[i - w]) { mask[i - w] = 1; stack[sp++] = i - w; }
+      if (y < h - 1 && src[i + w] && !mask[i + w]) { mask[i + w] = 1; stack[sp++] = i + w; }
+    }
+    if (area < 12) return null;
+    return this.outlineOf(mask, area, bx0, by0, bx1, by1);
+  }
+
+  // Outline (+ holes) of a 4-connected blob. Returns { outer, holes, area } in image pixels, or null.
+  outlineOf(mask, area, bx0, by0, bx1, by1) {
+    const { w, h } = this;
     const eps = Math.max(1.5, 0.0025 * Math.max(w, h));
     const outer = simplify(traceOuter(mask, w, h, bx0, by0, bx1, by1), eps);
     if (outer.length < 3) return null;

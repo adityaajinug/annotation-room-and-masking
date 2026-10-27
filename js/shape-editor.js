@@ -213,7 +213,7 @@ class ShapeEditor {
       return;
     }
     if (!this.hooks.activeId()) { this.hooks.status('Add a surface first (+ Add).'); return; }
-    if (this.tool === 'wand') { this.hooks.onWand(p); return; }
+    if (this.tool === 'wand' || this.tool === 'sam') { this.hooks.onWand(p, this.tool); return; }
     this.svg.setPointerCapture(e.pointerId);
     if (this.tool === 'pen') this.penDown(this.snapPt(p));
     else { this.boxDraft = { kind: this.tool, p0: p, box: null }; this.drag = { type: 'box' }; }

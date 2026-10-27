@@ -9,7 +9,7 @@ const PHOTO_MAX = 2000, TEX_MAX = 2048;
 const LOOK_SLIDERS = [['set-detail', 'detailStrength', 0.6], ['set-highlight', 'highlightStrength', 0.5], ['set-contact', 'contactShadow', 0.35], ['set-tint', 'tintStrength', 0.5]];
 
 let project = Store.empty();
-let editor = null, vision = null, img = null, surface = null, mode = 'include', tool = 'pen', placing = false, scale = 1;
+let editor = null, vision = null, sam = new Sam(), img = null, surface = null, mode = 'include', tool = 'pen', placing = false, scale = 1;
 let snapOn = false, wandTol = 25, wandHoles = true, detectSens = 55;
 
 const stage = $('admin-stage');
@@ -335,6 +335,7 @@ function setMode(m) {
     pen: 'click = corner point, click + drag = curve. Finish: click the first point, press Enter or double-click.',
     rect: 'drag to draw a rectangle (Shift = square, Alt = from the centre).',
     ellipse: 'drag to draw an ellipse or circle (Shift = circle, Alt = from the centre).',
+    sam: 'click an object: AI outlines it (first use downloads a ~35-60 MB model, then it is cached). In Exclude mode the object becomes a hole; in Include mode it becomes the area that changes.',
     wand: 'click an object or surface: the area of similar colour becomes a shape. Adjust Tolerance below; objects inside become Exclude.',
   }[tool];
   const what = {
@@ -376,7 +377,7 @@ function makeEditor() {
 
 function setTool(t) {
   tool = t;
-  ['select', 'pen', 'rect', 'ellipse', 'wand'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
+  ['select', 'pen', 'rect', 'ellipse', 'wand', 'sam'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
   $('tool-opts').hidden = t !== 'wand';
   if (editor) editor.setTool(t);
   setMode(mode);
@@ -477,7 +478,8 @@ function bindView() {
 }
 
 // ---- magic wand + edge snapping (js/vision.js) ----
-function runWand(p) {
+function runWand(p, kind) {
+  if (kind === 'sam') { runSam(p); return; }
   if (!surface) { status('Add a surface first (+ Add).'); return; }
   if (mode === 'quad') { status('A perspective plane needs 4 corners: use Pen or Rect.'); return; }
   const { w, h } = vision;
@@ -509,6 +511,32 @@ function runDetect() {
     editor.addPolygons(objs.map(poly => ({ mode: 'exclude', points: norm(poly) })));
     status(`${objs.length} object(s) added as Exclude. Fix them with Select (V), or Ctrl+Z.`);
   }, 0);
+}
+
+// AI select: SlimSAM outlines whatever is under the click.
+let samBusy = false;
+async function runSam(p) {
+  if (!surface) { status('Add a surface first (+ Add).'); return; }
+  if (mode === 'quad') { status('A perspective plane needs 4 corners: use Pen or Rect.'); return; }
+  if (samBusy) return;
+  samBusy = true;
+  try {
+    await sam.load(status);
+    await sam.setPhoto(img.src, project.image, status);
+    status('Segmenting...');
+    const res = await sam.segment([{ x: p[0], y: p[1], label: 1 }]);
+    const w = vision.w, h = vision.h;
+    const r = vision.outlineOfMask(res.mask, p[0] * w, p[1] * h);
+    if (!r) { status('The AI found nothing there. Try another spot on the object.'); return; }
+    const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
+    const list = [{ mode, points: norm(r.outer) }];
+    if (mode === 'include' && wandHoles) for (const hole of r.holes) list.push({ mode: 'exclude', points: norm(hole) });
+    editor.addPolygons(list);
+    status(`AI select: ${list.length} shape(s) (confidence ${Math.round(res.score * 100)}%). Refine with Select (V), or Ctrl+Z.`);
+  } catch (e) {
+    status('AI select failed: ' + (e && e.message || e) + ' (needs internet the first time).');
+    console.error(e);
+  } finally { samBusy = false; }
 }
 
 function setSnap(on) {
@@ -611,7 +639,7 @@ async function init() {
   $('file-tex').onchange = e => { uploadTextures([...e.target.files]); e.target.value = ''; };
   $('btn-add-surface').onclick = addSurface;
   ['include', 'exclude', 'quad'].forEach(k => ($('mode-' + k).onclick = () => setMode(k)));
-  ['select', 'pen', 'rect', 'ellipse', 'wand'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
+  ['select', 'pen', 'rect', 'ellipse', 'wand', 'sam'].forEach(k => ($('tool-' + k).onclick = () => setTool(k)));
   $('btn-snap').onclick = () => setSnap(!snapOn);
   $('wand-tol').oninput = e => { wandTol = +e.target.value; $('wand-tol-val').textContent = wandTol; };
   $('detect-sens').oninput = e => { detectSens = +e.target.value; $('detect-sens-val').textContent = detectSens; };
@@ -661,6 +689,7 @@ async function init() {
     else if (k === 'r') setTool('rect');
     else if (k === 'o') setTool('ellipse');
     else if (k === 'w') setTool('wand');
+    else if (k === 'a') setTool('sam');
     else if (k === 's' && !e.ctrlKey && !e.metaKey) setSnap(!snapOn);
     else if (k === ' ') { e.preventDefault(); spaceDown = true; scroller.classList.add('pan-ready'); }
     else if (k === '+' || k === '=') setScale(scale * 1.25);

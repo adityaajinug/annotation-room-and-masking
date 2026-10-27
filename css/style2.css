@@ -89,7 +89,7 @@ body.app .admin-bar { flex:none; padding:6px 12px; }
 .help[open] { width:340px; }
 .help-body { padding:4px 12px 10px; font-size:12px; color:var(--fg); max-height:60vh; overflow:auto; }
 .help-body p { margin:0 0 8px; }
-.shape-layer.tool-wand { cursor:crosshair; }
+.shape-layer.tool-wand, .shape-layer.tool-sam { cursor:crosshair; }
 
 @media (max-width:1100px) { .workspace { grid-template-columns:200px minmax(0,1fr) 220px; } }
 @media (max-width:800px) { .workspace { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto; } .workspace .side { max-height:30vh; } .statusbar { display:none; } }
