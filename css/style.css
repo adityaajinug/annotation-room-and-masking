@@ -31,8 +31,6 @@ button, select { font:inherit; }
 .stage #cv-result { position:absolute; inset:0; }
 .status { color:var(--muted); margin:8px 0 0; }
 
-.divider { position:absolute; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 4px #0008; pointer-events:none; }
-#compare-range { position:absolute; left:0; right:0; top:50%; width:100%; margin:0; opacity:0; height:100%; top:0; cursor:ew-resize; }
 
 .pin { position:absolute; transform:translate(-50%,-50%); width:28px; height:28px; border-radius:50%; border:3px solid #fff; background:var(--accent); box-shadow:0 2px 8px #0008; cursor:pointer; padding:0; }
 .pin span { display:none; position:absolute; left:34px; top:50%; transform:translateY(-50%); white-space:nowrap; background:#fff; color:var(--fg); padding:3px 8px; border-radius:4px; font-size:12px; line-height:1.4; }

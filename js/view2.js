@@ -101,7 +101,6 @@ async function selectTexture(t) {
   };
   buildTextureList();
   syncAdjustUI(e.params);
-  $('btn-compare').disabled = false;
   e.tex = await Store.textureImage(t);
   if (e.texture !== t) return; // user switched meanwhile
   draw();
@@ -144,42 +143,6 @@ function bindControls() {
   $('adj-ox').oninput = upd((p, v) => p.offset[0] = +v);
   $('adj-oy').oninput = upd((p, v) => p.offset[1] = +v);
   $('adj-shade').oninput = upd((p, v) => p.shadeStrength = +v);
-
-  // Compare: result canvas is clipped from the divider to the right edge.
-  const range = $('compare-range'), div = $('divider'), res = $('cv-result');
-  const setSplit = v => {
-    res.style.clipPath = `inset(0 0 0 ${v}%)`;
-    div.style.left = v + '%';
-  };
-  range.oninput = () => setSplit(+range.value);
-  $('btn-compare').onclick = ev => {
-    const on = !ev.target.classList.contains('on');
-    ev.target.classList.toggle('on', on);
-    range.hidden = div.hidden = !on;
-    if (on) setSplit(+range.value); else res.style.clipPath = '';
-  };
-
-  $('btn-reset').onclick = () => {
-    for (const e of state.entries) { e.texture = null; e.tex = null; e.params = null; e.renderer.clear(); }
-    res.hidden = true;
-    range.hidden = div.hidden = true;
-    res.style.clipPath = '';
-    $('btn-compare').classList.remove('on');
-    $('btn-compare').disabled = true;
-    buildTextureList();
-    $('status').textContent = 'Reset to original.';
-  };
-
-  $('btn-download').onclick = () => {
-    const src = res.hidden ? $('cv-original') : res;
-    src.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'room-preview.png';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }, 'image/png');
-  };
 }
 
 init().catch(err => { $('status').textContent = 'Error: ' + err.message + ' (run via a local static server)'; });
