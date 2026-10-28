@@ -14,10 +14,13 @@
 .rows .dot { width:14px; height:14px; border-radius:50%; flex:none; border:2px solid #fff; box-shadow:0 0 0 1px #0004; }
 .rows .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rows img { width:40px; height:40px; object-fit:cover; border-radius:4px; flex:none; }
+#texture-list li { align-items:flex-start; } /* tall rows: keep the thumbnail at the top */
 .rows .icon { border:0; background:none; cursor:pointer; padding:2px 5px; color:var(--muted); border-radius:4px; }
 .rows .icon:hover { background:#eee; color:var(--fg); }
 .rows input[type=number] { width:64px; margin:0; }
-.rows .tex-meta { flex:1; min-width:0; display:grid; gap:2px; font-size:12px; }
+.rows .tex-meta { flex:1; min-width:0; display:grid; gap:6px; font-size:12px; }  /* one field per line so every label stays readable */
+.rows .tex-meta label { display:grid; gap:2px; margin:0; }
+.rows .tex-meta select, .rows .tex-meta input { width:100%; min-width:0; }
 
 .checks label { display:flex; align-items:center; gap:8px; margin:0; width:100%; cursor:pointer; color:var(--fg); }
 .empty { display:grid; place-items:center; gap:10px; min-height:300px; color:#ccc; text-align:center; }
@@ -68,7 +71,12 @@ body.app .admin-bar { flex:none; padding:6px 12px; }
 .admin-scroll.panning, .admin-scroll.panning .shape-layer { cursor:grabbing !important; }
 
 .float { position:absolute; z-index:40; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 4px 18px #0004; }
-.guide.float { top:10px; left:50%; transform:translateX(-50%); width:max-content; max-width:min(760px,70%); margin:0; padding:6px 12px; border-left:4px solid var(--accent); font-size:12px; font-weight:600; pointer-events:none; }
+.guide.float { top:10px; left:50%; transform:translateX(-50%); width:max-content; max-width:min(760px,70%); margin:0; padding:6px 8px 6px 12px; border-left:4px solid var(--accent); font-size:12px; font-weight:600; pointer-events:none; display:flex; align-items:flex-start; gap:8px; }
+.guide.float[hidden] { display:none; }
+.guide-x { pointer-events:auto; flex:none; border:0; background:none; cursor:pointer; font-size:16px; line-height:1; color:var(--muted); padding:0 4px; border-radius:4px; }
+.guide-x:hover { background:#eee; color:var(--fg); }
+.guide-open { top:10px; left:14px; }
+.guide-open[hidden] { display:none; }
 .draft-bar { top:56px; left:50%; transform:translateX(-50%); width:max-content; display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:13px; }
 .draft-bar[hidden], .tool-opts[hidden] { display:none; }
 .toolbar { bottom:14px; left:50%; transform:translateX(-50%); width:max-content; display:flex; align-items:center; gap:4px; padding:6px; max-width:calc(100% - 24px); flex-wrap:wrap; justify-content:center; }
@@ -82,7 +90,7 @@ body.app .admin-bar { flex:none; padding:6px 12px; }
 .zoombar { bottom:14px; right:14px; display:flex; align-items:center; gap:2px; padding:4px; }
 .zoombar .btn { border-color:transparent; min-width:30px; }
 .zoombar .btn:hover { background:#f0f3fb; }
-.statusbar { bottom:62px; right:14px; max-width:min(340px,40%); padding:5px 10px; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.statusbar { top:46px; right:14px; max-width:min(340px,40%); padding:5px 10px; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .statusbar:empty { display:none; }
 .help { top:10px; right:14px; border-radius:8px; }
 .help summary { list-style:none; cursor:pointer; border:0; }
@@ -94,3 +102,5 @@ body.app .admin-bar { flex:none; padding:6px 12px; }
 @media (max-width:1100px) { .workspace { grid-template-columns:200px minmax(0,1fr) 220px; } }
 @media (max-width:800px) { .workspace { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto; } .workspace .side { max-height:30vh; } .statusbar { display:none; } }
 .tool-opts .sep { width:1px; height:22px; background:var(--line); }
+.tool-opts.sam-mode .wand-only { display:none; }
+.tool-opts { flex-wrap:wrap; justify-content:center; max-width:calc(100% - 24px); }

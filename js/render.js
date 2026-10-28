@@ -64,7 +64,8 @@ class SurfaceRenderer {
   // Perspective path: inverse-map every masked pixel into plane space, sample a pre-scaled tile.
   renderQuad(tex, params) {
     const { w, h } = this;
-    const tw = Math.max(8, Math.round(params.tileWidthPx));
+    const tw = Math.max(8, Math.round(this.tilePx(params, tex)));
+    const mode = params.repeat || 'repeat'; // repeat | mirror | cover (fit once)
     const th = Math.max(8, Math.round(tw * tex.height / tex.width));
     const c = this.scaled || (this.scaled = document.createElement('canvas'));
     c.width = tw; c.height = th; // also clears
@@ -79,6 +80,9 @@ class SurfaceRenderer {
     const M = this.mask.data, P = this.photoData.data, out = this.result.data;
     const L = this.look(params);
     const mod = (v, n) => ((v % n) + n) % n;
+    const mirror = (v, n) => { const q = mod(v, 2 * n); return Math.min(n - 1e-4, q < n ? q : 2 * n - q); };
+    const fold = mode === 'mirror' ? mirror : mode === 'cover' ? (v, n) => Math.min(n - 1e-4, Math.max(0, v)) : mod;
+    const wrap = mode === 'repeat';
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const i = y * w + x, j = i * 4, m = M[i];
@@ -91,9 +95,9 @@ class SurfaceRenderer {
         let r = 0, gg = 0, bb = 0;
         for (let q = 0; q < taps; q++) {
           const f = (q + 0.5) / taps;
-          const fx = mod(p0[0] + (p1[0] - p0[0]) * f, tw), fy = mod(p0[1] + (p1[1] - p0[1]) * f, th);
+          const fx = fold(p0[0] + (p1[0] - p0[0]) * f, tw), fy = fold(p0[1] + (p1[1] - p0[1]) * f, th);
           const ix = Math.floor(fx), iy = Math.floor(fy), ax = fx - ix, ay = fy - iy;
-          const ix2 = (ix + 1) % tw, iy2 = (iy + 1) % th;
+          const ix2 = wrap ? (ix + 1) % tw : Math.min(tw - 1, ix + 1), iy2 = wrap ? (iy + 1) % th : Math.min(th - 1, iy + 1);
           const a00 = (iy * tw + ix) * 4, a10 = (iy * tw + ix2) * 4, a01 = (iy2 * tw + ix) * 4, a11 = (iy2 * tw + ix2) * 4;
           const w00 = (1 - ax) * (1 - ay), w10 = ax * (1 - ay), w01 = (1 - ax) * ay, w11 = ax * ay;
           r += T[a00] * w00 + T[a10] * w10 + T[a01] * w01 + T[a11] * w11;
@@ -155,6 +159,22 @@ class SurfaceRenderer {
     this.tint = [sr, sg, sb].map(v => Math.min(1.25, Math.max(0.8, v / c / lumAvg)));
   }
 
+  // Width of one texture tile in photo pixels. With a real-world size (params.tileCm) and the surface's real
+  // width (surface.realWidthCm) the tile is scaled to match the surface; otherwise the manual tileWidthPx is used.
+  tilePx(params, tex) {
+    const b = this.mask.bbox;
+    if (params.repeat === 'cover' && tex) { // "fit once": big enough to cover the whole surface
+      const w0 = this.quad ? this.quad.Wp : b.x1 - b.x0 + 1, h0 = this.quad ? this.quad.Hp : b.y1 - b.y0 + 1;
+      return Math.max(w0, (h0 * tex.width) / tex.height);
+    }
+    const cm = params.tileCm, real = this.surface.realWidthCm;
+    if (cm > 0 && real > 0) {
+      const ref = this.quad ? this.quad.Wp : b.x1 - b.x0 + 1; // plane width / width of the shape, in photo px
+      return Math.max(8, (cm / real) * ref);
+    }
+    return params.tileWidthPx;
+  }
+
   // Per-render lighting settings (surface sliders, with defaults) and the scene tint gains.
   look(params) {
     const sf = this.surface, ts = sf.tintStrength ?? 0.5;
@@ -179,20 +199,41 @@ class SurfaceRenderer {
     out[j + 2] = P[j + 2] * (1 - m) + (t2 + (255 - t2) * hi) * m;
   }
 
-  // tex: image/canvas. params: {tileWidthPx, rotation (deg), offset:[x,y], shadeStrength}
+  // 2x2 tile of the texture with every other copy flipped, so repeated edges meet seamlessly.
+  mirrored(tex) {
+    if (this._mir && this._mir.src === tex) return this._mir.canvas;
+    const c = document.createElement('canvas');
+    c.width = tex.width * 2; c.height = tex.height * 2;
+    const g = c.getContext('2d');
+    for (const [qx, qy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { // cell (qx, qy), flipped when its index is 1
+      g.save();
+      g.translate(qx ? tex.width * 2 : 0, qy ? tex.height * 2 : 0);
+      g.scale(qx ? -1 : 1, qy ? -1 : 1);
+      g.drawImage(tex, 0, 0);
+      g.restore();
+    }
+    this._mir = { src: tex, canvas: c };
+    return c;
+  }
+
+  // tex: image/canvas. params: {tileWidthPx, rotation (deg), offset:[x,y], shadeStrength, repeat?, tileCm?}
   // Returns ImageData to put on a canvas.
   render(tex, params) {
     if (this.quad) return this.renderQuad(tex, params);
     const { w, h, tileCtx: g } = this;
-    const s = params.tileWidthPx / tex.width;
+    const mode = params.repeat || 'repeat';
+    const s = this.tilePx(params, tex) / tex.width;
     const R = ((w + h) * 2) / s;
+    const b = this.mask.bbox;
+    const cx = mode === 'cover' ? (b.x0 + b.x1 + 1) / 2 : w / 2, cy = mode === 'cover' ? (b.y0 + b.y1 + 1) / 2 : h / 2;
 
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, w, h);
-    g.setTransform(1, 0, 0, 1, w / 2 + params.offset[0], h / 2 + params.offset[1]);
+    g.setTransform(1, 0, 0, 1, cx + params.offset[0], cy + params.offset[1]);
     g.rotate((params.rotation * Math.PI) / 180);
     g.scale(s, s);
-    g.fillStyle = g.createPattern(tex, 'repeat');
+    if (mode === 'cover') g.translate(-tex.width / 2, -tex.height / 2); // centre the slab on the surface
+    g.fillStyle = g.createPattern(mode === 'mirror' ? this.mirrored(tex) : tex, 'repeat');
     g.fillRect(-R, -R, 2 * R, 2 * R);
     g.setTransform(1, 0, 0, 1, 0, 0);
     const T = g.getImageData(0, 0, w, h).data;

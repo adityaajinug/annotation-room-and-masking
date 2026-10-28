@@ -197,6 +197,7 @@ class ShapeEditor {
     const h = t.dataset && t.dataset.h;
     if (h && this.sel) { // handles of the selected shape work with every tool
       const i = +t.dataset.i;
+      if (h === 'a' && e.altKey) { this.selNode = i; this.deleteKey(); return; } // Alt+click a node = delete it
       this.svg.setPointerCapture(e.pointerId);
       if (h === 'a') this.selNode = i;
       this.drag = { type: h, i, start: p, orig: JSON.parse(JSON.stringify(this.sel.nodes)), box0: this.sel.box && [...this.sel.box], moved: false };
@@ -299,14 +300,78 @@ class ShapeEditor {
   }
 
   // Add ready-made polygons (e.g. from the magic wand) as one undo step.
-  addPolygons(list) {
+  addPolygons(list, { smooth = false } = {}) {
     const sid = this.hooks.activeId();
     const made = list.map(poly => this.fromPolygon(sid, poly)).filter(Boolean);
     if (!made.length) return;
+    if (smooth) for (const m of made) this.smoothNodes(m);
     for (const m of made) this.shapes.push(m);
     this.sel = made[0]; this.selNode = -1;
     this.render();
     this.hooks.onChange();
+  }
+
+  // Turn corner nodes into smooth curve nodes: handles follow the line between the two neighbours, but nodes
+  // that turn sharper than `corner` degrees stay corners, so real corners are not rounded off.
+  smoothNodes(s, corner = 55) {
+    if (s.kind !== 'path' || s.mode === 'quad' || s.nodes.length < 3) return false;
+    const W = this.W || 1, H = this.H || 1, n = s.nodes.length;
+    const P = nd => [nd.x * W, nd.y * H];
+    const src = s.nodes.map(nd => ({ ...nd }));
+    s.nodes.forEach((nd, i) => {
+      const a = P(src[(i + n - 1) % n]), c = P(src[i]), b = P(src[(i + 1) % n]);
+      const d1 = [c[0] - a[0], c[1] - a[1]], d2 = [b[0] - c[0], b[1] - c[1]];
+      const l1 = Math.hypot(...d1), l2 = Math.hypot(...d2);
+      nd.ix = nd.iy = nd.ox = nd.oy = 0; nd.smooth = false;
+      if (!l1 || !l2) return;
+      const turn = (Math.acos(Math.max(-1, Math.min(1, (d1[0] * d2[0] + d1[1] * d2[1]) / (l1 * l2)))) * 180) / Math.PI;
+      if (turn > corner) return; // a real corner
+      const t = [b[0] - a[0], b[1] - a[1]], tl = Math.hypot(...t) || 1;
+      nd.ox = ((t[0] / tl) * l2 / 3) / W; nd.oy = ((t[1] / tl) * l2 / 3) / H;
+      nd.ix = -((t[0] / tl) * l1 / 3) / W; nd.iy = -((t[1] / tl) * l1 / 3) / H;
+      nd.smooth = true;
+    });
+    return true;
+  }
+
+  // Selected shape -> smooth curves / back to straight corners. Returns false when it does not apply.
+  smoothSelected(smooth) {
+    const s = this.sel;
+    if (!s || s.kind !== 'path' || s.mode === 'quad') return false;
+    if (smooth) this.smoothNodes(s);
+    else s.nodes.forEach(nd => { nd.ix = nd.iy = nd.ox = nd.oy = 0; nd.smooth = false; });
+    this.render();
+    this.hooks.onChange();
+    return true;
+  }
+
+  // Drop redundant nodes of the selected path (Douglas-Peucker on the flattened outline). `tol` is in screen px.
+  // Curves are kept as plain corners afterwards; use "Smooth shape" to round them again.
+  simplifySelected(tol = 3) {
+    const s = this.sel;
+    if (!s || s.kind !== 'path' || s.mode === 'quad' || s.nodes.length <= 3) return false;
+    const W = this.W || 1, H = this.H || 1;
+    const pts = flatten(s.nodes).map(([x, y]) => [x * W, y * H]);
+    const dp = (a, b) => { // indices kept strictly between a and b
+      let far = -1, max = tol;
+      const [ax, ay] = pts[a], [bx, by] = pts[b], dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      for (let i = a + 1; i < b; i++) {
+        const d = Math.abs(dy * (pts[i][0] - ax) - dx * (pts[i][1] - ay)) / len;
+        if (d > max) { max = d; far = i; }
+      }
+      return far < 0 ? [] : [...dp(a, far), far, ...dp(far, b)];
+    };
+    // closed ring: split at the point farthest from point 0 so both halves are open polylines
+    let m = 1, md = 0;
+    pts.forEach((p, i) => { const d = Math.hypot(p[0] - pts[0][0], p[1] - pts[0][1]); if (d > md) { md = d; m = i; } });
+    pts.push(pts[0]);
+    const keep = [0, ...dp(0, m), m, ...dp(m, pts.length - 1)];
+    if (keep.length < 3) return false;
+    s.nodes = keep.map(i => corner(c01(pts[i][0] / W), c01(pts[i][1] / H)));
+    this.selNode = -1;
+    this.render();
+    this.hooks.onChange();
+    return true;
   }
 
   // ---- pen ----

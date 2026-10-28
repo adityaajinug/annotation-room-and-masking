@@ -14,6 +14,9 @@
     <button class="btn" id="btn-undo" title="Ctrl+Z">Undo</button>
     <button class="btn" id="btn-redo" title="Ctrl+Shift+Z">Redo</button>
     <button class="btn" id="btn-delete" title="Delete">Delete shape</button>
+    <button class="btn" id="btn-simplify" title="Remove redundant nodes of the selected shape (e.g. after AI select)">Fewer nodes</button>
+    <button class="btn" id="btn-smooth" title="Round the selected shape into smooth curves (sharp corners stay)">Smooth shape</button>
+    <button class="btn" id="btn-corners" title="Turn the selected shape back into straight lines">Straight corners</button>
     <span class="sep"></span>
     <button class="btn" id="btn-test">Test texture</button>
     <select id="product-select"></select>
@@ -53,7 +56,11 @@
         </div>
       </div>
 
-      <div class="guide float" id="guide"></div>
+      <div class="guide float" id="guide-box">
+        <span id="guide"></span>
+        <button class="guide-x" id="guide-close" title="Hide hints">&times;</button>
+      </div>
+      <button class="btn small float guide-open" id="guide-open" title="Show hints" hidden>Hints</button>
 
       <div class="draft-bar float" id="draft-bar" hidden>
         <span><b id="draft-count">0</b> points</span>
@@ -63,11 +70,13 @@
       </div>
 
       <div class="tool-opts float" id="tool-opts" hidden>
-        <label>Tolerance <input type="range" id="wand-tol" min="5" max="100" step="1" value="25"> <b id="wand-tol-val">25</b></label>
+        <label class="wand-only">Tolerance <input type="range" id="wand-tol" min="5" max="100" step="1" value="25"> <b id="wand-tol-val">25</b></label>
+        <label title="Few nodes (rough, best with smooth curves) to many nodes (hugs the edge)">Detail <input type="range" id="shape-detail" min="1" max="100" step="1" value="55"> <b id="shape-detail-val">55</b></label>
+        <label class="inline"><input type="checkbox" id="shape-smooth" checked> Smooth curves</label>
         <label class="inline"><input type="checkbox" id="wand-holes" checked> Objects inside become Exclude</label>
-        <span class="sep"></span>
-        <label>Object sensitivity <input type="range" id="detect-sens" min="1" max="75" step="1" value="55"> <b id="detect-sens-val">55</b></label>
-        <button class="btn small" id="btn-detect" title="Find objects (food, faucet...) inside this surface's Include shapes and make them Exclude">Auto exclude objects</button>
+        <span class="sep wand-only"></span>
+        <label class="wand-only">Object sensitivity <input type="range" id="detect-sens" min="1" max="75" step="1" value="55"> <b id="detect-sens-val">55</b></label>
+        <button class="btn small wand-only" id="btn-detect" title="Find objects (food, faucet...) inside this surface's Include shapes and make them Exclude">Auto exclude objects</button>
       </div>
 
       <div class="toolbar float" id="toolbar">
@@ -99,7 +108,7 @@
           <p><b>Flow:</b> upload a photo, <b>+ Add</b> a surface and click the photo to place its dot, pick <b>Include</b> (changes) or <b>Exclude</b> (stays original), draw the shape, upload textures, <b>Test texture</b> / <b>Preview</b>. Everything autosaves in this browser; <b>More &rarr; Export JSON</b> for a portable copy.</p>
           <p><b>Draw:</b> <kbd>P</kbd> Pen (click = corner, drag = curve, close on the first point / <kbd>Enter</kbd>) · <kbd>R</kbd> Rect · <kbd>O</kbd> Ellipse · <kbd>W</kbd> Wand (click a colour area).</p>
           <p><b>Edit:</b> <kbd>V</kbd> Select, then click a shape · drag nodes and handles · double-click an outline = add node · double-click a node = corner/smooth · double-click a rectangle/ellipse = path · <kbd>Alt</kbd>+drag a handle = break symmetry.</p>
-          <p><b>Undo:</b> while drawing <kbd>Ctrl+Z</kbd> removes the last point, <kbd>Esc</kbd> cancels the whole shape. Afterwards <kbd>Ctrl+Z</kbd> undoes the shape, <kbd>Delete</kbd> removes the selected node or shape.</p>
+          <p><b>Undo:</b> while drawing <kbd>Ctrl+Z</kbd> removes the last point, <kbd>Esc</kbd> cancels the whole shape. Afterwards <kbd>Ctrl+Z</kbd> undoes the shape, <kbd>Delete</kbd> removes the selected node or shape · <kbd>Alt</kbd>+click a node deletes it · <b>Fewer nodes</b> thins out a crowded shape.</p>
           <p><b>View:</b> mouse wheel = zoom at the cursor · hold <kbd>Space</kbd> and drag (or middle mouse) = pan · <kbd>+</kbd> <kbd>-</kbd> zoom · <kbd>0</kbd> fit.</p>
         </div>
       </details>
@@ -114,6 +123,8 @@
         <label>Highlights <input type="range" id="set-highlight" min="0" max="1" step="0.05"></label>
         <label>Contact shadow <input type="range" id="set-contact" min="0" max="1" step="0.05"></label>
         <label>Scene tint <input type="range" id="set-tint" min="0" max="1" step="0.05"></label>
+        <label>Real width (cm) <input type="number" id="set-realwidth" min="1" max="5000" step="1" placeholder="off">
+          <small>Real width of this surface (the perspective plane, or the shape if there is none). With a texture's "Tile cm" it sets the pattern size, so it looks right on any photo.</small></label>
         <label>Plane aspect <input type="number" id="set-aspect" min="0.2" max="20" step="0.1" placeholder="auto">
           <small>Perspective only: width : depth of the real surface.</small></label>
       </section>

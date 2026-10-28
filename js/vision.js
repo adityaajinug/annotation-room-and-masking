@@ -34,7 +34,7 @@ class Vision {
   }
 
   // tol 1..100. Returns { outer: [[x,y]...], holes: [[[x,y]...]...], area } in image pixels, or null.
-  wand(sx, sy, tol) {
+  wand(sx, sy, tol, detail = 55) {
     this.prep();
     const { w, h, pix } = this;
     sx = Math.min(w - 1, Math.max(0, Math.floor(sx)));
@@ -67,11 +67,11 @@ class Vision {
       if (y < h - 1 && !mask[i + w] && near(i + w)) { mask[i + w] = 1; stack[sp++] = i + w; }
     }
     if (area < 12) return null;
-    return this.outlineOf(mask, area, bx0, by0, bx1, by1);
+    return this.outlineOf(mask, area, bx0, by0, bx1, by1, detail);
   }
 
   // Outline (+ holes) of an external binary mask (e.g. from the AI select). Keeps the blob under (sx, sy).
-  outlineOfMask(src, sx, sy) {
+  outlineOfMask(src, sx, sy, detail = 55) {
     const { w, h } = this;
     sx = Math.min(w - 1, Math.max(0, Math.floor(sx)));
     sy = Math.min(h - 1, Math.max(0, Math.floor(sy)));
@@ -99,13 +99,14 @@ class Vision {
       if (y < h - 1 && src[i + w] && !mask[i + w]) { mask[i + w] = 1; stack[sp++] = i + w; }
     }
     if (area < 12) return null;
-    return this.outlineOf(mask, area, bx0, by0, bx1, by1);
+    return this.outlineOf(mask, area, bx0, by0, bx1, by1, detail);
   }
 
   // Outline (+ holes) of a 4-connected blob. Returns { outer, holes, area } in image pixels, or null.
-  outlineOf(mask, area, bx0, by0, bx1, by1) {
+  // detail 1..100: low = few nodes (rough, good with smooth curves), high = many nodes hugging the edge.
+  outlineOf(mask, area, bx0, by0, bx1, by1, detail = 55) {
     const { w, h } = this;
-    const eps = Math.max(1.5, 0.0025 * Math.max(w, h));
+    const eps = Math.max(0.6, 0.006 * Math.max(w, h) * (1 - detail / 100));
     const outer = simplify(traceOuter(mask, w, h, bx0, by0, bx1, by1), eps);
     if (outer.length < 3) return null;
 

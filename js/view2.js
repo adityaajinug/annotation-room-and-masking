@@ -29,7 +29,6 @@ async function init() {
 
   buildSurfaceChips();
   buildPins();
-  bindControls();
   setActive(state.entries[0]);
   $('status').textContent = state.textures.length ? 'Pick a surface, then a texture.' : 'No textures in this project yet. Upload some in admin-2.';
 }
@@ -70,7 +69,6 @@ function setActive(e) {
     x.pin.classList.toggle('focus', x === e);
   });
   buildTextureList();
-  if (e.params) syncAdjustUI(e.params);
 }
 
 function buildTextureList() {
@@ -96,11 +94,10 @@ async function selectTexture(t) {
   const e = state.active;
   e.texture = t;
   e.params = {
-    tileWidthPx: t.tileWidthPx, rotation: t.rotation, offset: [...t.offset],
+    tileWidthPx: t.tileWidthPx, tileCm: t.tileCm, repeat: t.repeat, rotation: t.rotation, offset: [...t.offset],
     shadeStrength: e.surface.shadeStrength ?? 0.8,
   };
   buildTextureList();
-  syncAdjustUI(e.params);
   e.tex = await Store.textureImage(t);
   if (e.texture !== t) return; // user switched meanwhile
   draw();
@@ -116,33 +113,6 @@ function draw() {
   $('cv-result').getContext('2d').putImageData(state.result, 0, 0);
   $('cv-result').hidden = false;
   $('status').textContent = `Rendered in ${Math.round(performance.now() - t0)} ms`;
-}
-
-function scheduleDraw() {
-  cancelAnimationFrame(state.rafId);
-  state.rafId = requestAnimationFrame(draw);
-}
-
-function syncAdjustUI(p) {
-  $('adj-tile').value = p.tileWidthPx;
-  $('adj-rot').value = String(p.rotation);
-  $('adj-ox').value = p.offset[0];
-  $('adj-oy').value = p.offset[1];
-  $('adj-shade').value = p.shadeStrength;
-}
-
-function bindControls() {
-  const upd = fn => ev => {
-    const e = state.active;
-    if (!e || !e.params) return;
-    fn(e.params, ev.target.value);
-    scheduleDraw();
-  };
-  $('adj-tile').oninput = upd((p, v) => p.tileWidthPx = +v);
-  $('adj-rot').onchange = upd((p, v) => p.rotation = +v);
-  $('adj-ox').oninput = upd((p, v) => p.offset[0] = +v);
-  $('adj-oy').oninput = upd((p, v) => p.offset[1] = +v);
-  $('adj-shade').oninput = upd((p, v) => p.shadeStrength = +v);
 }
 
 init().catch(err => { $('status').textContent = 'Error: ' + err.message + ' (run via a local static server)'; });

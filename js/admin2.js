@@ -10,7 +10,7 @@ const LOOK_SLIDERS = [['set-detail', 'detailStrength', 0.6], ['set-highlight', '
 
 let project = Store.empty();
 let editor = null, vision = null, sam = new Sam(), img = null, surface = null, mode = 'include', tool = 'pen', placing = false, scale = 1;
-let wandTol = 25, wandHoles = true, detectSens = 55;
+let previewMode = null, detailLevel = 55, smoothShapes = true, wandTol = 25, wandHoles = true, detectSens = 55;
 
 const stage = $('admin-stage');
 const scroller = $('admin-scroll');
@@ -119,7 +119,7 @@ function startPinDrag(e, s, el) {
 function setPlacing(on) {
   placing = on;
   $('place-overlay').hidden = !on;
-  if (on) $('guide').textContent = `Click the photo to place the dot of "${surface.label}". (Esc = skip)`;
+  if (on) { $('guide').textContent = `Click the photo to place the dot of "${surface.label}". (Esc = skip)`; status(`Click the photo to place the dot of "${surface.label}".`); }
   else setMode(mode);
 }
 
@@ -201,6 +201,7 @@ function renderSettings() {
   $('set-shade').value = surface.shadeStrength ?? 0.8;
   for (const [id, key, def] of LOOK_SLIDERS) $(id).value = surface[key] ?? def;
   $('set-aspect').value = surface.planeAspect ?? '';
+  $('set-realwidth').value = surface.realWidthCm ?? '';
   renderAllowed();
 }
 
@@ -239,12 +240,26 @@ function renderTextureList() {
     psel.add(new Option(t.name, t.id));
     const li = document.createElement('li');
     li.style.cursor = 'default';
-    li.innerHTML = '<img alt=""><div class="tex-meta"><span class="name"></span><label>Tile px <input type="number" min="50" max="2000" step="10"></label></div><button class="icon" title="Delete">✕</button>';
+    li.innerHTML = '<img alt=""><div class="tex-meta"><span class="name"></span><label>Tile px <input type="number" min="50" max="2000" step="10"></label><label title="Real width of one tile. With the surface real width set, this replaces Tile px.">Tile cm <input class="tile-cm" type="number" min="1" max="500" step="1" placeholder="off"></label><label title="Repeat: tiles side by side. Mirror: every other tile flipped, hides seams (good for slab photos). Fit once: one copy covers the whole surface.">Repeat <select class="tile-repeat"><option value="repeat">Repeat</option><option value="mirror">Mirror</option><option value="cover">Fit once</option></select></label><label>Rotation <select class="tile-rot"><option>0</option><option>90</option><option>180</option><option>270</option></select></label><label title="Shift the pattern, in photo pixels">Offset X <input class="tile-ox" type="number" step="5"></label><label title="Shift the pattern, in photo pixels">Offset Y <input class="tile-oy" type="number" step="5"></label></div><button class="icon" title="Delete">✕</button>';
     li.querySelector('img').src = Store.urlOf(t.src);
     li.querySelector('.name').textContent = t.name;
     const num = li.querySelector('input');
     num.value = t.tileWidthPx;
     num.onchange = () => { t.tileWidthPx = Math.max(50, +num.value || 400); persist(); };
+    const cm = li.querySelector('.tile-cm');
+    cm.value = t.tileCm ?? '';
+    cm.onchange = () => { if (+cm.value > 0) t.tileCm = +cm.value; else delete t.tileCm; persist(); };
+    const rot = li.querySelector('.tile-rot'), ox = li.querySelector('.tile-ox'), oy = li.querySelector('.tile-oy');
+    rot.value = String(t.rotation || 0);
+    ox.value = (t.offset || [0, 0])[0];
+    oy.value = (t.offset || [0, 0])[1];
+    rot.onchange = () => { t.rotation = +rot.value; persist(); };
+    ox.onchange = oy.onchange = () => { t.offset = [+ox.value || 0, +oy.value || 0]; persist(); };
+    const rep = li.querySelector('.tile-repeat');
+    const syncRepeat = () => { num.disabled = cm.disabled = rep.value === 'cover'; };
+    rep.value = t.repeat || 'repeat';
+    syncRepeat();
+    rep.onchange = () => { if (rep.value === 'repeat') delete t.repeat; else t.repeat = rep.value; syncRepeat(); persist(); };
     li.querySelector('.icon').onclick = async () => {
       project.textures = project.textures.filter(x => x !== t);
       for (const s of project.surfaces) if (s.textureIds) s.textureIds = s.textureIds.filter(id => id !== t.id);
@@ -279,6 +294,8 @@ async function mountPhoto() {
   vision = null;
   stage.replaceChildren();
   img = null;
+  previewMode = null;
+  syncPreviewButtons();
   $('empty').hidden = !!project.image;
   if (!project.image) { refresh(); return; }
 
@@ -372,7 +389,8 @@ function makeEditor() {
 function setTool(t) {
   tool = t;
   ['select', 'pen', 'rect', 'ellipse', 'wand', 'sam'].forEach(k => $('tool-' + k).classList.toggle('on', t === k));
-  $('tool-opts').hidden = t !== 'wand';
+  $('tool-opts').hidden = t !== 'wand' && t !== 'sam';
+  $('tool-opts').classList.toggle('sam-mode', t === 'sam'); // tolerance / auto-exclude only make sense for the wand
   if (editor) editor.setTool(t);
   setMode(mode);
 }
@@ -479,12 +497,12 @@ function runWand(p, kind) {
   const { w, h } = vision;
   status('Selecting...');
   setTimeout(() => { // let the status paint before the flood fill
-    const r = vision.wand(p[0] * w, p[1] * h, wandTol);
+    const r = vision.wand(p[0] * w, p[1] * h, wandTol, detailLevel);
     if (!r) { status('Nothing found there. Try a higher tolerance.'); return; }
     const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
     const list = [{ mode, points: norm(r.outer) }];
     if (mode === 'include' && wandHoles) for (const hole of r.holes) list.push({ mode: 'exclude', points: norm(hole) });
-    editor.addPolygons(list);
+    editor.addPolygons(list, { smooth: smoothShapes });
     const big = r.area > 0.6 * w * h ? ' The area is huge: lower the tolerance.' : '';
     status(`Wand: ${list.length} shape(s). Refine the nodes with Select (V), or Ctrl+Z.${big}`);
   }, 0);
@@ -502,7 +520,7 @@ function runDetect() {
     const objs = vision.detectObjects(mask.data, detectSens);
     if (!objs.length) { status('No objects found. Raise "Object sensitivity" or draw them by hand.'); return; }
     const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
-    editor.addPolygons(objs.map(poly => ({ mode: 'exclude', points: norm(poly) })));
+    editor.addPolygons(objs.map(poly => ({ mode: 'exclude', points: norm(poly) })), { smooth: smoothShapes });
     status(`${objs.length} object(s) added as Exclude. Fix them with Select (V), or Ctrl+Z.`);
   }, 0);
 }
@@ -520,12 +538,12 @@ async function runSam(p) {
     status('Segmenting...');
     const res = await sam.segment([{ x: p[0], y: p[1], label: 1 }]);
     const w = vision.w, h = vision.h;
-    const r = vision.outlineOfMask(res.mask, p[0] * w, p[1] * h);
+    const r = vision.outlineOfMask(res.mask, p[0] * w, p[1] * h, detailLevel);
     if (!r) { status('The AI found nothing there. Try another spot on the object.'); return; }
     const norm = pts => pts.map(([x, y]) => [+(x / w).toFixed(4), +(y / h).toFixed(4)]);
     const list = [{ mode, points: norm(r.outer) }];
     if (mode === 'include' && wandHoles) for (const hole of r.holes) list.push({ mode: 'exclude', points: norm(hole) });
-    editor.addPolygons(list);
+    editor.addPolygons(list, { smooth: smoothShapes });
     status(`AI select: ${list.length} shape(s) (confidence ${Math.round(res.score * 100)}%). Refine with Select (V), or Ctrl+Z.`);
   } catch (e) {
     status('AI select failed: ' + (e && e.message || e) + ' (needs internet the first time).');
@@ -547,7 +565,8 @@ function deleteSelected() {
 async function togglePreview(textureId) {
   const cv = $('test');
   if (!img || !cv) return;
-  if (!cv.hidden) { cv.hidden = true; $('btn-test').classList.remove('on'); $('btn-preview').classList.remove('on'); return; }
+  const kind = textureId ? 'texture' : 'test';
+  if (!cv.hidden && previewMode === kind) { cv.hidden = true; previewMode = null; syncPreviewButtons(); return; } // same button again = exit
   const t = project.textures.find(x => x.id === textureId);
   if (textureId && !t) { status('Upload a texture first.'); return; }
   let tex;
@@ -567,14 +586,23 @@ async function togglePreview(textureId) {
     shared = r.result;
     if (t && !surfaceAllows(s, t)) continue; // this surface does not offer that texture
     r.render(tex, t
-      ? { tileWidthPx: t.tileWidthPx, rotation: t.rotation, offset: [...t.offset], shadeStrength: s.shadeStrength ?? 0.8 }
+      ? { tileWidthPx: t.tileWidthPx, tileCm: t.tileCm, repeat: t.repeat, rotation: t.rotation, offset: [...t.offset], shadeStrength: s.shadeStrength ?? 0.8 }
       : { tileWidthPx: 40, rotation: 0, offset: [0, 0], shadeStrength: 0 });
     cv.width = r.w; cv.height = r.h;
   }
   if (!shared) { status('Add a surface first.'); return; }
   cv.getContext('2d').putImageData(shared, 0, 0);
   cv.hidden = false;
-  $(t ? 'btn-preview' : 'btn-test').classList.add('on');
+  previewMode = kind; // clicking the other button while one is on switches to it
+  syncPreviewButtons();
+}
+
+// Buttons say what the next click does: Preview <-> Exit preview, Test texture <-> Exit test.
+function syncPreviewButtons() {
+  $('btn-preview').classList.toggle('on', previewMode === 'texture');
+  $('btn-preview').textContent = previewMode === 'texture' ? 'Exit preview' : 'Preview';
+  $('btn-test').classList.toggle('on', previewMode === 'test');
+  $('btn-test').textContent = previewMode === 'test' ? 'Exit test' : 'Test texture';
 }
 
 // ---- project-level actions ----
@@ -631,6 +659,11 @@ async function init() {
   $('wand-tol').oninput = e => { wandTol = +e.target.value; $('wand-tol-val').textContent = wandTol; };
   $('detect-sens').oninput = e => { detectSens = +e.target.value; $('detect-sens-val').textContent = detectSens; };
   $('btn-detect').onclick = runDetect;
+  $('shape-detail').oninput = e => { detailLevel = +e.target.value; $('shape-detail-val').textContent = detailLevel; };
+  $('shape-smooth').onchange = e => { smoothShapes = e.target.checked; };
+  $('btn-smooth').onclick = () => status(editor && editor.smoothSelected(true) ? 'Shape smoothed. Ctrl+Z to undo, or "Straight corners".' : 'Select a path shape first (Select tool, V). Perspective, rectangle and ellipse shapes are not smoothed.');
+  $('btn-simplify').onclick = () => status(editor && editor.simplifySelected(3) ? 'Removed extra nodes. Click again for fewer, Ctrl+Z to undo.' : 'Select a path shape with more than 3 nodes first (Select tool, V).');
+  $('btn-corners').onclick = () => status(editor && editor.smoothSelected(false) ? 'Shape set back to straight corners.' : 'Select a path shape first (Select tool, V).');
   $('wand-holes').onchange = e => { wandHoles = e.target.checked; };
   $('draft-undo').onclick = () => editor && editor.undoPoint();
   $('draft-cancel').onclick = () => editor && editor.cancelDraft();
@@ -646,6 +679,18 @@ async function init() {
   };
   $('btn-test').onclick = () => togglePreview('');
   $('btn-preview').onclick = () => togglePreview($('product-select').value);
+  $('product-select').onchange = async () => { // changing the texture while previewing shows the new one
+    if (previewMode !== 'texture') return;
+    $('test').hidden = true; previewMode = null;
+    await togglePreview($('product-select').value);
+  };
+  const hideHints = h => {
+    $('guide-box').hidden = h; $('guide-open').hidden = !h;
+    try { localStorage.setItem('admin2.hintsHidden', h ? '1' : ''); } catch (e) { /* private mode */ }
+  };
+  $('guide-close').onclick = () => hideHints(true);
+  $('guide-open').onclick = () => hideHints(false);
+  try { if (localStorage.getItem('admin2.hintsHidden')) hideHints(true); } catch (e) { /* ignore */ }
   $('btn-export').onclick = exportJson;
   $('btn-sample').onclick = loadSample;
   $('btn-reset').onclick = async () => {
@@ -659,6 +704,10 @@ async function init() {
   $('set-feather').oninput = e => { surface.feather = +e.target.value; persist(); };
   $('set-shade').oninput = e => { surface.shadeStrength = +e.target.value; persist(); };
   for (const [id, key] of LOOK_SLIDERS) $(id).oninput = e => { surface[key] = +e.target.value; persist(); };
+  $('set-realwidth').onchange = e => {
+    if (+e.target.value > 0) surface.realWidthCm = +e.target.value; else delete surface.realWidthCm;
+    persist();
+  };
   $('set-aspect').onchange = e => {
     if (+e.target.value > 0) surface.planeAspect = +e.target.value; else delete surface.planeAspect;
     persist();
